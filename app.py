@@ -29,6 +29,32 @@ APPLICATION_STATUSES = (
     "Final review",
     "Pending payments",
     "Loan issued",
+    "Rejected",
+)
+
+KPI_PENDING_STATUSES = (
+    "New applicant",
+    "Collection of documentation",
+    "Approval",
+    "Management approval",
+    "Signing agreement",
+    "Final review",
+)
+
+KPI_APPROVED_STATUSES = ("Pending payments", "Loan issued")
+KPI_REJECTED_STATUS = "Rejected"
+KPI_HIGH_RISK_LEVELS = ("High", "Critical")
+
+ADMIN_PAGE_SIZE = 15
+ADMIN_SEARCH_MAX_LENGTH = 100
+
+ADMIN_LIST_FILTER_KEYS = (
+    "status",
+    "sub_status",
+    "risk_level",
+    "flagged_fraud",
+    "assigned_officer",
+    "q",
 )
 
 APPLICATION_SUB_STATUSES = (
@@ -257,6 +283,155 @@ def init_db():
     conn.close()
 
 
+def _parse_admin_list_filters(args) -> dict:
+    status = (args.get("status") or "").strip()
+    if status and status not in APPLICATION_STATUSES:
+        status = ""
+
+    sub_status = (args.get("sub_status") or "").strip()
+    if sub_status and sub_status not in APPLICATION_SUB_STATUSES:
+        sub_status = ""
+
+    risk_level = (args.get("risk_level") or "").strip()
+    if risk_level and risk_level not in APPLICATION_RISK_LEVELS:
+        risk_level = ""
+
+    flagged_fraud = (args.get("flagged_fraud") or "").strip()
+    if flagged_fraud not in {"", "0", "1"}:
+        flagged_fraud = ""
+
+    assigned_officer = (args.get("assigned_officer") or "").strip()
+    if len(assigned_officer) > MAX_ASSIGNED_OFFICER_LENGTH:
+        assigned_officer = assigned_officer[:MAX_ASSIGNED_OFFICER_LENGTH]
+
+    search_query = (args.get("q") or "").strip()
+    if len(search_query) > ADMIN_SEARCH_MAX_LENGTH:
+        search_query = search_query[:ADMIN_SEARCH_MAX_LENGTH]
+
+    try:
+        page = max(1, int(args.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+
+    return {
+        "status": status,
+        "sub_status": sub_status,
+        "risk_level": risk_level,
+        "flagged_fraud": flagged_fraud,
+        "assigned_officer": assigned_officer,
+        "q": search_query,
+        "page": page,
+    }
+
+
+def _build_applications_where(filters: dict) -> tuple[str, list]:
+    clauses: list[str] = []
+    params: list = []
+
+    if filters["status"]:
+        clauses.append("status = ?")
+        params.append(filters["status"])
+
+    if filters["sub_status"]:
+        clauses.append("sub_status = ?")
+        params.append(filters["sub_status"])
+
+    if filters["risk_level"]:
+        clauses.append("risk_level = ?")
+        params.append(filters["risk_level"])
+
+    if filters["flagged_fraud"] in {"0", "1"}:
+        clauses.append("flagged_fraud = ?")
+        params.append(int(filters["flagged_fraud"]))
+
+    if filters["assigned_officer"]:
+        clauses.append("assigned_officer LIKE ?")
+        params.append(f"%{filters['assigned_officer']}%")
+
+    if filters["q"]:
+        like_term = f"%{filters['q']}%"
+        clauses.append(
+            "(business_name LIKE ? OR owner_name LIKE ? OR email LIKE ? OR phone_number LIKE ?)"
+        )
+        params.extend([like_term, like_term, like_term, like_term])
+
+    if clauses:
+        return " WHERE " + " AND ".join(clauses), params
+    return "", params
+
+
+def _filters_to_query_params(filters: dict) -> dict:
+    return {key: filters[key] for key in ADMIN_LIST_FILTER_KEYS if filters.get(key)}
+
+
+def _fetch_application_kpis(cursor) -> dict:
+    pending_placeholders = ", ".join("?" * len(KPI_PENDING_STATUSES))
+    approved_placeholders = ", ".join("?" * len(KPI_APPROVED_STATUSES))
+    high_risk_placeholders = ", ".join("?" * len(KPI_HIGH_RISK_LEVELS))
+
+    cursor.execute(
+        f"""
+        SELECT
+            COUNT(*) AS total_applications,
+            SUM(CASE WHEN status IN ({pending_placeholders}) THEN 1 ELSE 0 END) AS pending_review,
+            SUM(CASE WHEN status IN ({approved_placeholders}) THEN 1 ELSE 0 END) AS approved,
+            SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS rejected,
+            SUM(CASE WHEN risk_level IN ({high_risk_placeholders}) THEN 1 ELSE 0 END) AS high_risk,
+            SUM(CASE WHEN flagged_fraud = 1 THEN 1 ELSE 0 END) AS fraud_flagged
+        FROM applications
+        """,
+        (
+            *KPI_PENDING_STATUSES,
+            *KPI_APPROVED_STATUSES,
+            KPI_REJECTED_STATUS,
+            *KPI_HIGH_RISK_LEVELS,
+        ),
+    )
+    row = cursor.fetchone()
+    return {
+        "total_applications": row["total_applications"] or 0,
+        "pending_review": row["pending_review"] or 0,
+        "approved": row["approved"] or 0,
+        "rejected": row["rejected"] or 0,
+        "high_risk": row["high_risk"] or 0,
+        "fraud_flagged": row["fraud_flagged"] or 0,
+    }
+
+
+def _fetch_distinct_officers(cursor) -> list[str]:
+    cursor.execute(
+        """
+        SELECT DISTINCT assigned_officer
+        FROM applications
+        WHERE assigned_officer IS NOT NULL AND TRIM(assigned_officer) != ''
+        ORDER BY assigned_officer COLLATE NOCASE ASC
+        """
+    )
+    return [row["assigned_officer"] for row in cursor.fetchall()]
+
+
+@app.template_global()
+def dashboard_risk_badge_class(risk_level: str) -> str:
+    mapping = {
+        "Low": "dashboard-badge-risk-low",
+        "Medium": "dashboard-badge-risk-medium",
+        "High": "dashboard-badge-risk-high",
+        "Critical": "dashboard-badge-risk-critical",
+    }
+    return mapping.get(risk_level, "dashboard-badge-risk-neutral")
+
+
+@app.template_global()
+def dashboard_status_badge_class(status: str) -> str:
+    if status == KPI_REJECTED_STATUS:
+        return "dashboard-badge-status-rejected"
+    if status in KPI_APPROVED_STATUSES:
+        return "dashboard-badge-status-approved"
+    if status in KPI_PENDING_STATUSES:
+        return "dashboard-badge-status-pending"
+    return "dashboard-badge-status-neutral"
+
+
 def _fetch_application(application_id: int) -> sqlite3.Row | None:
     conn = _get_db_connection()
     cursor = conn.cursor()
@@ -357,11 +532,24 @@ def apply():
 @app.route('/admin')
 @require_admin_auth
 def admin():
+    filters = _parse_admin_list_filters(request.args)
+    where_sql, where_params = _build_applications_where(filters)
+
     conn = _get_db_connection()
     cursor = conn.cursor()
 
+    kpis = _fetch_application_kpis(cursor)
+    officers = _fetch_distinct_officers(cursor)
+
+    cursor.execute(f"SELECT COUNT(*) AS total FROM applications{where_sql}", where_params)
+    total_matching = cursor.fetchone()["total"] or 0
+
+    total_pages = max(1, (total_matching + ADMIN_PAGE_SIZE - 1) // ADMIN_PAGE_SIZE)
+    page = min(filters["page"], total_pages)
+    offset = (page - 1) * ADMIN_PAGE_SIZE
+
     cursor.execute(
-        """
+        f"""
         SELECT
             id,
             business_name,
@@ -370,17 +558,42 @@ def admin():
             revenue,
             product,
             status,
+            sub_status,
             risk_level,
-            flagged_fraud
+            flagged_fraud,
+            assigned_officer
         FROM applications
+        {where_sql}
         ORDER BY id DESC
-        """
+        LIMIT ? OFFSET ?
+        """,
+        (*where_params, ADMIN_PAGE_SIZE, offset),
     )
     applications = cursor.fetchall()
-
     conn.close()
 
-    return render_template("dashboard.html", applications=applications)
+    pagination = {
+        "page": page,
+        "total_pages": total_pages,
+        "total_matching": total_matching,
+        "has_prev": page > 1,
+        "has_next": page < total_pages,
+        "page_size": ADMIN_PAGE_SIZE,
+    }
+
+    return render_template(
+        "dashboard.html",
+        applications=applications,
+        filters=filters,
+        kpis=kpis,
+        pagination=pagination,
+        filter_query=_filters_to_query_params(filters),
+        statuses=APPLICATION_STATUSES,
+        sub_statuses=APPLICATION_SUB_STATUSES,
+        risk_levels=APPLICATION_RISK_LEVELS,
+        officers=officers,
+        active_nav="applications",
+    )
 
 
 @app.route("/admin/applications/<int:application_id>")
@@ -398,6 +611,7 @@ def admin_application_detail(application_id: int):
         statuses=APPLICATION_STATUSES,
         sub_statuses=APPLICATION_SUB_STATUSES,
         risk_levels=APPLICATION_RISK_LEVELS,
+        active_nav="applications",
     )
 
 

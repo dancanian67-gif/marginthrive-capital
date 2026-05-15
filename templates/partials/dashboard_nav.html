@@ -1,0 +1,13 @@
+<aside class="dashboard-nav" aria-label="Admin navigation">
+    <p class="dashboard-nav-brand">Margin<span>Thrive</span> Ops</p>
+    <nav class="dashboard-nav-links">
+        <a
+            href="{{ url_for('admin') }}"
+            class="dashboard-nav-link{% if active_nav == 'applications' %} is-active{% endif %}"
+        >
+            Applications
+        </a>
+        <span class="dashboard-nav-link is-disabled" title="Coming soon">Analytics</span>
+        <span class="dashboard-nav-link is-disabled" title="Coming soon">Reports</span>
+    </nav>
+</aside>

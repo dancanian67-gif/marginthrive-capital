@@ -62,3 +62,21 @@ Constants are defined in `app.py` as `APPLICATION_STATUSES` and `APPLICATION_SUB
 | POST | `/admin/applications/<id>/workflow` | Save status, sub-status, risk, officer, notes, fraud flag |
 
 Risk levels: `Unassigned`, `Low`, `Medium`, `High`, `Critical`.
+
+## Admin list operations (Phase A3)
+
+`GET /admin` accepts optional query parameters:
+
+| Parameter | Purpose |
+|-----------|---------|
+| `status` | Exact status filter |
+| `sub_status` | Exact sub-status filter |
+| `risk_level` | Exact risk filter |
+| `flagged_fraud` | `0` or `1` |
+| `assigned_officer` | Partial match (LIKE) |
+| `q` | Search business name, owner, email, phone |
+| `page` | Pagination (15 per page) |
+
+KPI cards show **portfolio-wide** counts (not filtered). The table respects active filters. Pagination links preserve filter/search query params.
+
+Lifecycle status **Rejected** is available for filtering and workflow updates.

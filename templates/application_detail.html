@@ -9,7 +9,9 @@
 <body>
 
 <div class="dashboard-page">
-    <main class="dashboard-shell dashboard-content">
+    <div class="dashboard-layout">
+        {% include 'partials/dashboard_nav.html' %}
+    <main class="dashboard-shell dashboard-content dashboard-main">
         <section class="dashboard-section">
             <header class="dashboard-section-header">
                 <p class="dashboard-back-link">
@@ -152,6 +154,7 @@
             </div>
         </section>
     </main>
+    </div>
 </div>
 
 </body>

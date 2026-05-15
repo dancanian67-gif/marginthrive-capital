@@ -9,50 +9,206 @@
 <body>
 
 <div class="dashboard-page">
-    <main class="dashboard-shell dashboard-content">
-        <section class="dashboard-section">
-            <header class="dashboard-section-header">
-                <h1 class="dashboard-title">Applications Dashboard</h1>
-            </header>
+    <div class="dashboard-layout">
+        {% include 'partials/dashboard_nav.html' %}
 
-            <div class="dashboard-glass dashboard-card dashboard-table-container">
-                <table class="dashboard-table">
-                    <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Business</th>
-                        <th>Owner</th>
-                        <th>Email</th>
-                        <th>Revenue</th>
-                        <th>Product</th>
-                        <th>Status</th>
-                        <th>Risk</th>
-                        <th>Fraud</th>
-                        <th>Action</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {% for app in applications %}
-                    <tr>
-                        <td>{{ app['id'] }}</td>
-                        <td>{{ app['business_name'] }}</td>
-                        <td>{{ app['owner_name'] }}</td>
-                        <td>{{ app['email'] }}</td>
-                        <td>{{ app['revenue'] }}</td>
-                        <td>{{ app['product'] }}</td>
-                        <td>{{ app['status'] }}</td>
-                        <td>{{ app['risk_level'] }}</td>
-                        <td>{% if app['flagged_fraud'] %}Yes{% else %}—{% endif %}</td>
-                        <td>
-                            <a class="dashboard-link" href="{{ url_for('admin_application_detail', application_id=app['id']) }}">Review</a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </section>
-    </main>
+        <main class="dashboard-shell dashboard-content dashboard-main">
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <h1 class="dashboard-title">Applications Dashboard</h1>
+                    <p class="dashboard-subtitle">Operational control center</p>
+                </header>
+
+                <div class="dashboard-kpi-grid">
+                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Total applications</p>
+                        <p class="dashboard-kpi-value">{{ kpis.total_applications }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Pending review</p>
+                        <p class="dashboard-kpi-value">{{ kpis.pending_review }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Approved</p>
+                        <p class="dashboard-kpi-value">{{ kpis.approved }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Rejected</p>
+                        <p class="dashboard-kpi-value">{{ kpis.rejected }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">High risk</p>
+                        <p class="dashboard-kpi-value">{{ kpis.high_risk }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Fraud flagged</p>
+                        <p class="dashboard-kpi-value">{{ kpis.fraud_flagged }}</p>
+                    </div>
+                </div>
+
+                <div class="dashboard-glass dashboard-card dashboard-filters-card">
+                    <h2 class="dashboard-panel-title">Filter &amp; search</h2>
+                    <form class="dashboard-filters-form" method="GET" action="{{ url_for('admin') }}">
+                        <div class="dashboard-filters-grid">
+                            <div class="dashboard-form-row">
+                                <label for="filter-status">Status</label>
+                                <select id="filter-status" name="status">
+                                    <option value="">All statuses</option>
+                                    {% for status in statuses %}
+                                    <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>{{ status }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="filter-sub-status">Sub-status</label>
+                                <select id="filter-sub-status" name="sub_status">
+                                    <option value="">All sub-statuses</option>
+                                    {% for sub_status in sub_statuses %}
+                                    <option value="{{ sub_status }}" {% if filters.sub_status == sub_status %}selected{% endif %}>{{ sub_status }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="filter-risk">Risk level</label>
+                                <select id="filter-risk" name="risk_level">
+                                    <option value="">All risk levels</option>
+                                    {% for level in risk_levels %}
+                                    <option value="{{ level }}" {% if filters.risk_level == level %}selected{% endif %}>{{ level }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="filter-fraud">Fraud flag</label>
+                                <select id="filter-fraud" name="flagged_fraud">
+                                    <option value="">All</option>
+                                    <option value="1" {% if filters.flagged_fraud == '1' %}selected{% endif %}>Flagged</option>
+                                    <option value="0" {% if filters.flagged_fraud == '0' %}selected{% endif %}>Not flagged</option>
+                                </select>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="filter-officer">Assigned officer</label>
+                                <input
+                                    type="text"
+                                    id="filter-officer"
+                                    name="assigned_officer"
+                                    list="officer-options"
+                                    value="{{ filters.assigned_officer }}"
+                                    placeholder="Officer name"
+                                    maxlength="150"
+                                >
+                                <datalist id="officer-options">
+                                    {% for officer in officers %}
+                                    <option value="{{ officer }}"></option>
+                                    {% endfor %}
+                                </datalist>
+                            </div>
+                            <div class="dashboard-form-row dashboard-filters-search">
+                                <label for="filter-q">Search</label>
+                                <input
+                                    type="search"
+                                    id="filter-q"
+                                    name="q"
+                                    value="{{ filters.q }}"
+                                    placeholder="Business, owner, email, or phone"
+                                    maxlength="100"
+                                >
+                            </div>
+                        </div>
+                        <div class="dashboard-form-actions">
+                            <button type="submit" class="dashboard-btn-primary">Apply filters</button>
+                            <a class="dashboard-btn-secondary" href="{{ url_for('admin') }}">Clear</a>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="dashboard-results-meta">
+                    <p>
+                        Showing
+                        {% if applications %}
+                        {{ applications|length }}
+                        {% else %}
+                        0
+                        {% endif %}
+                        of {{ pagination.total_matching }} matching
+                        {% if pagination.total_matching == 1 %}application{% else %}applications{% endif %}
+                    </p>
+                </div>
+
+                <div class="dashboard-glass dashboard-card dashboard-table-container">
+                    <table class="dashboard-table">
+                        <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Business</th>
+                            <th>Owner</th>
+                            <th>Email</th>
+                            <th>Revenue</th>
+                            <th>Product</th>
+                            <th>Status</th>
+                            <th>Risk</th>
+                            <th>Fraud</th>
+                            <th>Action</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for app in applications %}
+                        <tr>
+                            <td>{{ app['id'] }}</td>
+                            <td>{{ app['business_name'] }}</td>
+                            <td>{{ app['owner_name'] }}</td>
+                            <td>{{ app['email'] }}</td>
+                            <td>{{ app['revenue'] }}</td>
+                            <td>{{ app['product'] }}</td>
+                            <td>
+                                <span class="dashboard-badge {{ dashboard_status_badge_class(app['status']) }}">
+                                    {{ app['status'] }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="dashboard-badge {{ dashboard_risk_badge_class(app['risk_level']) }}">
+                                    {{ app['risk_level'] }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if app['flagged_fraud'] %}
+                                <span class="dashboard-badge dashboard-badge-fraud">Flagged</span>
+                                {% else %}
+                                <span class="dashboard-badge dashboard-badge-fraud-clear">Clear</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a class="dashboard-link" href="{{ url_for('admin_application_detail', application_id=app['id']) }}">Review</a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="10" class="dashboard-table-empty">No applications match your filters.</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if pagination.total_pages > 1 %}
+                <nav class="dashboard-pagination" aria-label="Applications pagination">
+                    {% if pagination.has_prev %}
+                    <a class="dashboard-btn-secondary" href="{{ url_for('admin', page=pagination.page - 1, **filter_query) }}">Previous</a>
+                    {% else %}
+                    <span class="dashboard-btn-secondary is-disabled">Previous</span>
+                    {% endif %}
+                    <span class="dashboard-pagination-status">
+                        Page {{ pagination.page }} of {{ pagination.total_pages }}
+                    </span>
+                    {% if pagination.has_next %}
+                    <a class="dashboard-btn-secondary" href="{{ url_for('admin', page=pagination.page + 1, **filter_query) }}">Next</a>
+                    {% else %}
+                    <span class="dashboard-btn-secondary is-disabled">Next</span>
+                    {% endif %}
+                </nav>
+                {% endif %}
+            </section>
+        </main>
+    </div>
 </div>
 
 </body>
