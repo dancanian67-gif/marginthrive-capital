@@ -1,6 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
@@ -13,7 +15,7 @@
                 <h1 class="dashboard-title">Applications Dashboard</h1>
             </header>
 
-            <div class="dashboard-glass dashboard-card dashboard-table-container dashboard-analytics-container">
+            <div class="dashboard-glass dashboard-card dashboard-table-container">
                 <table class="dashboard-table">
                     <thead>
                     <tr>
@@ -23,17 +25,27 @@
                         <th>Email</th>
                         <th>Revenue</th>
                         <th>Product</th>
+                        <th>Status</th>
+                        <th>Risk</th>
+                        <th>Fraud</th>
+                        <th>Action</th>
                     </tr>
                     </thead>
                     <tbody>
                     {% for app in applications %}
                     <tr>
-                        <td>{{ app[0] }}</td>
-                        <td>{{ app[1] }}</td>
-                        <td>{{ app[2] }}</td>
-                        <td>{{ app[3] }}</td>
-                        <td>{{ app[4] }}</td>
-                        <td>{{ app[5] }}</td>
+                        <td>{{ app['id'] }}</td>
+                        <td>{{ app['business_name'] }}</td>
+                        <td>{{ app['owner_name'] }}</td>
+                        <td>{{ app['email'] }}</td>
+                        <td>{{ app['revenue'] }}</td>
+                        <td>{{ app['product'] }}</td>
+                        <td>{{ app['status'] }}</td>
+                        <td>{{ app['risk_level'] }}</td>
+                        <td>{% if app['flagged_fraud'] %}Yes{% else %}—{% endif %}</td>
+                        <td>
+                            <a class="dashboard-link" href="{{ url_for('admin_application_detail', application_id=app['id']) }}">Review</a>
+                        </td>
                     </tr>
                     {% endfor %}
                     </tbody>

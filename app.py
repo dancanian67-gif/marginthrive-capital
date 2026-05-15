@@ -10,7 +10,7 @@ import secrets
 import sqlite3
 from functools import wraps
 
-from flask import Flask, Response, redirect, render_template, request, session
+from flask import Flask, Response, flash, redirect, render_template, request, session, url_for
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-secret-key-change-me")
@@ -42,6 +42,17 @@ APPLICATION_SUB_STATUSES = (
 
 DEFAULT_APPLICATION_STATUS = APPLICATION_STATUSES[0]
 DEFAULT_RISK_LEVEL = "Unassigned"
+
+APPLICATION_RISK_LEVELS = (
+    "Unassigned",
+    "Low",
+    "Medium",
+    "High",
+    "Critical",
+)
+
+MAX_APPROVAL_NOTES_LENGTH = 5000
+MAX_ASSIGNED_OFFICER_LENGTH = 150
 
 # ALTER TABLE only allows constant defaults; timestamps are backfilled after add.
 APPLICATIONS_SCHEMA_COLUMNS = (
@@ -245,6 +256,58 @@ def init_db():
     conn.commit()
     conn.close()
 
+
+def _fetch_application(application_id: int) -> sqlite3.Row | None:
+    conn = _get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM applications WHERE id = ?", (application_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row
+
+
+def _normalize_sub_status(raw_value: str) -> str | None:
+    value = (raw_value or "").strip()
+    if not value:
+        return None
+    return value if value in APPLICATION_SUB_STATUSES else None
+
+
+def _parse_flagged_fraud(raw_value: str) -> int:
+    return 1 if (raw_value or "").strip() in {"1", "true", "on", "yes"} else 0
+
+
+def _validate_workflow_form(data) -> dict | None:
+    status = (data.get("status") or "").strip()
+    if status not in APPLICATION_STATUSES:
+        return None
+
+    sub_status = _normalize_sub_status(data.get("sub_status", ""))
+    if (data.get("sub_status") or "").strip() and sub_status is None:
+        return None
+
+    risk_level = (data.get("risk_level") or "").strip()
+    if risk_level not in APPLICATION_RISK_LEVELS:
+        return None
+
+    assigned_officer = (data.get("assigned_officer") or "").strip()
+    if len(assigned_officer) > MAX_ASSIGNED_OFFICER_LENGTH:
+        return None
+
+    approval_notes = (data.get("approval_notes") or "").strip()
+    if len(approval_notes) > MAX_APPROVAL_NOTES_LENGTH:
+        return None
+
+    return {
+        "status": status,
+        "sub_status": sub_status,
+        "risk_level": risk_level,
+        "assigned_officer": assigned_officer,
+        "approval_notes": approval_notes,
+        "flagged_fraud": _parse_flagged_fraud(data.get("flagged_fraud", "")),
+    }
+
+
 @app.route('/')
 def home():
     csrf_token = _ensure_session_csrf_token()
@@ -305,7 +368,10 @@ def admin():
             owner_name,
             email,
             revenue,
-            product
+            product,
+            status,
+            risk_level,
+            flagged_fraud
         FROM applications
         ORDER BY id DESC
         """
@@ -315,6 +381,73 @@ def admin():
     conn.close()
 
     return render_template("dashboard.html", applications=applications)
+
+
+@app.route("/admin/applications/<int:application_id>")
+@require_admin_auth
+def admin_application_detail(application_id: int):
+    application = _fetch_application(application_id)
+    if application is None:
+        return Response("Application not found.", status=404)
+
+    csrf_token = _ensure_session_csrf_token()
+    return render_template(
+        "application_detail.html",
+        application=application,
+        csrf_token=csrf_token,
+        statuses=APPLICATION_STATUSES,
+        sub_statuses=APPLICATION_SUB_STATUSES,
+        risk_levels=APPLICATION_RISK_LEVELS,
+    )
+
+
+@app.route("/admin/applications/<int:application_id>/workflow", methods=["POST"])
+@require_admin_auth
+def admin_application_workflow(application_id: int):
+    if not _validate_csrf(request.form.get("csrf_token", "")):
+        flash("Security check failed. Please try again.", "error")
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    application = _fetch_application(application_id)
+    if application is None:
+        return Response("Application not found.", status=404)
+
+    workflow = _validate_workflow_form(request.form)
+    if workflow is None:
+        flash("Invalid workflow data. No changes were saved.", "error")
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    conn = _get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        UPDATE applications
+        SET
+            status = ?,
+            sub_status = ?,
+            risk_level = ?,
+            assigned_officer = ?,
+            approval_notes = ?,
+            flagged_fraud = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+        """,
+        (
+            workflow["status"],
+            workflow["sub_status"],
+            workflow["risk_level"],
+            workflow["assigned_officer"],
+            workflow["approval_notes"],
+            workflow["flagged_fraud"],
+            application_id,
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+    flash("Workflow updated successfully.", "success")
+    return redirect(url_for("admin_application_detail", application_id=application_id))
+
 
 if __name__ == '__main__':
     if not _is_development() and app.config["SECRET_KEY"] == "dev-only-secret-key-change-me":

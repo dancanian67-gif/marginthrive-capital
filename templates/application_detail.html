@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application #{{ application['id'] }} — MarginThrive Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+
+<div class="dashboard-page">
+    <main class="dashboard-shell dashboard-content">
+        <section class="dashboard-section">
+            <header class="dashboard-section-header">
+                <p class="dashboard-back-link">
+                    <a href="{{ url_for('admin') }}">← Back to applications</a>
+                </p>
+                <h1 class="dashboard-title">Application #{{ application['id'] }}</h1>
+                <p class="dashboard-subtitle">{{ application['business_name'] }} · {{ application['status'] }}</p>
+            </header>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="dashboard-flash-stack">
+                {% for category, message in messages %}
+                <div class="dashboard-flash dashboard-flash-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% endwith %}
+
+            <div class="dashboard-detail-grid">
+                <div class="dashboard-glass dashboard-card">
+                    <h2 class="dashboard-panel-title">Applicant information</h2>
+                    <dl class="dashboard-meta">
+                        <div><dt>Owner</dt><dd>{{ application['owner_name'] }}</dd></div>
+                        <div><dt>Email</dt><dd>{{ application['email'] }}</dd></div>
+                        <div><dt>Phone</dt><dd>{{ application['phone_number'] or '—' }}</dd></div>
+                        <div><dt>Date of birth</dt><dd>{{ application['date_of_birth'] or '—' }}</dd></div>
+                        <div><dt>Gender</dt><dd>{{ application['gender'] or '—' }}</dd></div>
+                    </dl>
+                </div>
+
+                <div class="dashboard-glass dashboard-card">
+                    <h2 class="dashboard-panel-title">Business information</h2>
+                    <dl class="dashboard-meta">
+                        <div><dt>Business</dt><dd>{{ application['business_name'] }}</dd></div>
+                        <div><dt>Business type</dt><dd>{{ application['business_type'] or '—' }}</dd></div>
+                        <div><dt>Monthly revenue</dt><dd>{{ application['revenue'] }}</dd></div>
+                        <div><dt>Product</dt><dd>{{ application['product'] }}</dd></div>
+                        <div><dt>Loan amount</dt><dd>{{ application['loan_amount'] if application['loan_amount'] is not none else '—' }}</dd></div>
+                    </dl>
+                </div>
+
+                <div class="dashboard-glass dashboard-card dashboard-detail-span">
+                    <h2 class="dashboard-panel-title">Workflow snapshot</h2>
+                    <dl class="dashboard-meta dashboard-meta-columns">
+                        <div><dt>Status</dt><dd>{{ application['status'] }}</dd></div>
+                        <div><dt>Sub-status</dt><dd>{{ application['sub_status'] or '—' }}</dd></div>
+                        <div><dt>Risk level</dt><dd>{{ application['risk_level'] }}</dd></div>
+                        <div><dt>Assigned officer</dt><dd>{{ application['assigned_officer'] or '—' }}</dd></div>
+                        <div><dt>Fraud flag</dt><dd>{% if application['flagged_fraud'] %}Flagged{% else %}Clear{% endif %}</dd></div>
+                        <div><dt>Created</dt><dd>{{ application['created_at'] or '—' }}</dd></div>
+                        <div><dt>Last updated</dt><dd>{{ application['updated_at'] or '—' }}</dd></div>
+                    </dl>
+                    {% if application['approval_notes'] %}
+                    <div class="dashboard-insight-panel dashboard-detail-notes-readonly">
+                        <h3 class="dashboard-panel-title">Current notes</h3>
+                        <p>{{ application['approval_notes'] }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="dashboard-glass dashboard-card dashboard-workflow-form-card">
+                <h2 class="dashboard-panel-title">Workflow actions</h2>
+                <form
+                    class="dashboard-form"
+                    method="POST"
+                    action="{{ url_for('admin_application_workflow', application_id=application['id']) }}"
+                >
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+                    <div class="dashboard-form-row">
+                        <label for="status">Status</label>
+                        <select id="status" name="status" required>
+                            {% for status in statuses %}
+                            <option value="{{ status }}" {% if application['status'] == status %}selected{% endif %}>{{ status }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="dashboard-form-row">
+                        <label for="sub_status">Sub-status</label>
+                        <select id="sub_status" name="sub_status">
+                            <option value="">— None —</option>
+                            {% for sub_status in sub_statuses %}
+                            <option value="{{ sub_status }}" {% if application['sub_status'] == sub_status %}selected{% endif %}>{{ sub_status }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="dashboard-form-row">
+                        <label for="risk_level">Risk level</label>
+                        <select id="risk_level" name="risk_level" required>
+                            {% for level in risk_levels %}
+                            <option value="{{ level }}" {% if application['risk_level'] == level %}selected{% endif %}>{{ level }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div class="dashboard-form-row">
+                        <label for="assigned_officer">Assigned officer</label>
+                        <input
+                            type="text"
+                            id="assigned_officer"
+                            name="assigned_officer"
+                            value="{{ application['assigned_officer'] }}"
+                            maxlength="150"
+                            placeholder="Officer name or ID"
+                        >
+                    </div>
+
+                    <div class="dashboard-form-row">
+                        <label for="approval_notes">Approval notes</label>
+                        <textarea
+                            id="approval_notes"
+                            name="approval_notes"
+                            rows="5"
+                            maxlength="5000"
+                            placeholder="Internal underwriting notes"
+                        >{{ application['approval_notes'] }}</textarea>
+                    </div>
+
+                    <div class="dashboard-form-row dashboard-form-checkbox">
+                        <label>
+                            <input
+                                type="checkbox"
+                                name="flagged_fraud"
+                                value="1"
+                                {% if application['flagged_fraud'] %}checked{% endif %}
+                            >
+                            Flag for fraud review
+                        </label>
+                    </div>
+
+                    <div class="dashboard-form-actions">
+                        <button type="submit" class="dashboard-btn-primary">Save workflow updates</button>
+                        <a class="dashboard-btn-secondary" href="{{ url_for('admin') }}">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </section>
+    </main>
+</div>
+
+</body>
+</html>

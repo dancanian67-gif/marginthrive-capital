@@ -52,3 +52,13 @@ Legacy columns unchanged: `id`, `business_name`, `owner_name`, `email`, `revenue
 - No data is deleted.
 
 Constants are defined in `app.py` as `APPLICATION_STATUSES` and `APPLICATION_SUB_STATUSES`.
+
+## Admin workflow routes (Phase A2)
+
+| Method | Route | Purpose |
+|--------|-------|---------|
+| GET | `/admin` | Application list with status, risk, fraud, and Review link |
+| GET | `/admin/applications/<id>` | Application detail and workflow form |
+| POST | `/admin/applications/<id>/workflow` | Save status, sub-status, risk, officer, notes, fraud flag |
+
+Risk levels: `Unassigned`, `Low`, `Medium`, `High`, `Critical`.
