@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+
+<div class="dashboard-page">
+    <main class="dashboard-shell dashboard-content">
+        <section class="dashboard-section">
+            <header class="dashboard-section-header">
+                <h1 class="dashboard-title">Applications Dashboard</h1>
+            </header>
+
+            <div class="dashboard-glass dashboard-card dashboard-table-container dashboard-analytics-container">
+                <table class="dashboard-table">
+                    <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Business</th>
+                        <th>Owner</th>
+                        <th>Email</th>
+                        <th>Revenue</th>
+                        <th>Product</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {% for app in applications %}
+                    <tr>
+                        <td>{{ app[0] }}</td>
+                        <td>{{ app[1] }}</td>
+                        <td>{{ app[2] }}</td>
+                        <td>{{ app[3] }}</td>
+                        <td>{{ app[4] }}</td>
+                        <td>{{ app[5] }}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+</div>
+
+</body>
+</html>

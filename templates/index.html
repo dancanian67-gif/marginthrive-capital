@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>MarginThrive Capital</title>
+
+<!-- CSS -->
+<link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+
+<!-- ICONS -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+</head>
+
+<body>
+
+<!-- NAVBAR -->
+<header class="navbar">
+    <div class="logo">Margin<span>Thrive</span></div>
+
+    <nav>
+        <a class="active">Home</a>
+        <a href="#about">About Us</a>
+        <a href="#products">Our Solutions</a>
+        <a href="#process">How It Works</a>
+        <a href="#contact">Contact</a>
+    </nav>
+
+    <button class="nav-btn" onclick="scrollToSection('apply')">Apply Now</button>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+
+    <!-- BACKGROUND LOGO -->
+    <img src="{{ url_for('static', filename='logo.png') }}" class="hero-logo">
+
+    <div class="hero-left reveal">
+        <h1>
+            Borrow Based on <span>Profit</span>, Not Pressure
+        </h1>
+
+        <p>
+            Financing that grows with your business.
+            Repay based on real profits, not unrealistic expectations.
+        </p>
+
+        <div class="hero-buttons">
+            <button class="primary" onclick="scrollToSection('apply')">
+                Apply for Financing →
+            </button>
+            <button class="secondary">
+                Watch Overview
+            </button>
+        </div>
+
+        <div class="hero-features">
+            <span><i class="fas fa-lock"></i> Secure & Confidential</span>
+            <span><i class="fas fa-bolt"></i> Fast Approval</span>
+            <span><i class="fas fa-users"></i> 5000+ Businesses Trusted</span>
+        </div>
+    </div>
+
+</section>
+
+<!-- STATS -->
+<section class="stats reveal">
+    <div class="stat">
+        <h3>10+</h3>
+        <p>Years Experience</p>
+    </div>
+
+    <div class="stat">
+        <h3>5,000+</h3>
+        <p>Businesses Supported</p>
+    </div>
+
+    <div class="stat">
+        <h3>95%</h3>
+        <p>Client Retention</p>
+    </div>
+
+    <div class="stat">
+        <h3>₦10B+</h3>
+        <p>Financing Disbursed</p>
+    </div>
+</section>
+
+<!-- MAIN SECTION -->
+<section class="main reveal">
+
+    <!-- LEFT -->
+    <div class="left">
+
+        <h2>Why Choose MarginThrive</h2>
+
+        <div class="why">
+
+            <div class="why-item reveal">
+                <i class="fas fa-chart-line"></i>
+                <div>
+                    <h4>Profit-Based Lending</h4>
+                    <p>Repayments aligned with your profits</p>
+                </div>
+            </div>
+
+            <div class="why-item reveal">
+                <i class="fas fa-handshake"></i>
+                <div>
+                    <h4>Transparent & Fair</h4>
+                    <p>No hidden fees. Clear terms.</p>
+                </div>
+            </div>
+
+            <div class="why-item reveal">
+                <i class="fas fa-rocket"></i>
+                <div>
+                    <h4>Business Growth Focus</h4>
+                    <p>We help you scale sustainably</p>
+                </div>
+            </div>
+
+            <div class="why-item reveal">
+                <i class="fas fa-book"></i>
+                <div>
+                    <h4>Entrepreneur Education</h4>
+                    <p>Access to tools and insights</p>
+                </div>
+            </div>
+
+        </div>
+
+        <h2 id="products">Our Financing Solutions</h2>
+
+        <div class="cards">
+
+            <div class="card reveal">
+                <h3>MarginPro Facility</h3>
+                <p>For stable businesses with consistent margins</p>
+            </div>
+
+            <div class="card reveal">
+                <h3>HustleBoost Facility</h3>
+                <p>Fuel for scaling businesses</p>
+            </div>
+
+            <div class="card reveal">
+                <h3>QuickBridge Facility</h3>
+                <p>Short-term financial support</p>
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- RIGHT FORM -->
+    <div class="right">
+
+        <h2>Apply for Financing</h2>
+
+        <form action="/apply" method="POST" class="form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+            <input type="text" name="business_name" placeholder="Business Name" required>
+
+            <input type="text" name="owner_name" placeholder="Owner Name" required>
+
+            <input type="email" name="email" placeholder="Email Address" required>
+
+            <input type="number" name="revenue" placeholder="Monthly Revenue" required>
+
+            <select name="product" required>
+                <option value="">Select Product</option>
+                <option>MarginPro</option>
+                <option>HustleBoost</option>
+                <option>QuickBridge</option>
+            </select>
+
+            <button type="submit">Submit Application</button>
+
+        </form>
+
+    </div>
+
+</section>
+
+<!-- PROCESS -->
+<section id="process" class="process reveal">
+
+    <h2>How It Works</h2>
+
+    <div class="steps">
+
+        <div class="step">
+            <i class="fas fa-file-alt"></i>
+            <p>Apply</p>
+        </div>
+
+        <div class="step">
+            <i class="fas fa-search"></i>
+            <p>Analyze</p>
+        </div>
+
+        <div class="step">
+            <i class="fas fa-check-circle"></i>
+            <p>Approve</p>
+        </div>
+
+        <div class="step">
+            <i class="fas fa-chart-line"></i>
+            <p>Grow</p>
+        </div>
+
+    </div>
+
+</section>
+
+<!-- FOOTER -->
+<footer id="contact">
+    <p>© 2026 MarginThrive Capital — Growing your profit. Sustaining your future.</p>
+</footer>
+
+<!-- JS -->
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+
+</body>
+</html>
