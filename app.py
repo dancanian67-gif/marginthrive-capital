@@ -104,6 +104,20 @@ APPLICATION_RISK_LEVELS = (
 MAX_APPROVAL_NOTES_LENGTH = 5000
 MAX_ASSIGNED_OFFICER_LENGTH = 150
 
+WORKFLOW_STATUS_GROUPS = (
+    ("Intake & documentation", ("New applicant", "Collection of documentation")),
+    ("Approval", ("Approval", "Management approval", "Signing agreement", "Final review")),
+    ("Funding", ("Pending payments", "Loan issued")),
+    ("Closed", (KPI_REJECTED_STATUS,)),
+)
+
+WORKFLOW_SUB_STATUS_GROUPS = (
+    ("Client action", KPI_CLIENT_ACTION_SUB_STATUSES),
+    ("Operations", (KPI_OPS_REVIEW_SUB_STATUS, "Additional documentation", "Branch visit arranged", "Waiting for Other")),
+)
+
+OFFICER_NAME_PATTERN = re.compile(r"^[\w\s.'\-]{0,150}$", re.UNICODE)
+
 # ALTER TABLE only allows constant defaults; timestamps are backfilled after add.
 APPLICATIONS_SCHEMA_COLUMNS = (
     ("status", "TEXT NOT NULL DEFAULT 'New applicant'"),
@@ -671,6 +685,28 @@ def dashboard_status_badge_class(status: str) -> str:
     return "dashboard-badge-status-neutral"
 
 
+@app.template_global()
+def dashboard_table_row_class(application) -> str:
+    classes = []
+    if application["flagged_fraud"]:
+        classes.append("dashboard-table-row-fraud")
+    elif application["risk_level"] in KPI_HIGH_RISK_LEVELS:
+        classes.append("dashboard-table-row-high-risk")
+    elif _application_needs_attention(application):
+        classes.append("dashboard-table-row-attention")
+    return " ".join(classes)
+
+
+@app.template_global()
+def dashboard_workflow_status_groups():
+    return WORKFLOW_STATUS_GROUPS
+
+
+@app.template_global()
+def dashboard_workflow_sub_status_groups():
+    return WORKFLOW_SUB_STATUS_GROUPS
+
+
 def _fetch_application(application_id: int) -> sqlite3.Row | None:
     conn = _get_db_connection()
     cursor = conn.cursor()
@@ -687,32 +723,97 @@ def _normalize_sub_status(raw_value: str) -> str | None:
     return value if value in APPLICATION_SUB_STATUSES else None
 
 
+def _normalize_officer_name(raw_value: str) -> str:
+    collapsed = " ".join((raw_value or "").split())
+    if not collapsed:
+        return ""
+    if not OFFICER_NAME_PATTERN.match(collapsed):
+        return ""
+    return collapsed[:MAX_ASSIGNED_OFFICER_LENGTH]
+
+
 def _parse_flagged_fraud(raw_value: str) -> int:
     return 1 if (raw_value or "").strip() in {"1", "true", "on", "yes"} else 0
 
 
-def _validate_workflow_form(data) -> dict | None:
+def _is_allowed_status_transition(current_status: str, next_status: str) -> bool:
+    if current_status == next_status:
+        return True
+
+    if current_status == KPI_REJECTED_STATUS:
+        return next_status in {KPI_REJECTED_STATUS, DEFAULT_APPLICATION_STATUS}
+
+    if current_status == "Loan issued":
+        return next_status in {"Loan issued", "Pending payments", KPI_REJECTED_STATUS}
+
+    if next_status == "Loan issued":
+        return current_status in {"Pending payments", "Loan issued"}
+
+    if next_status == "Pending payments":
+        return current_status in {
+            "Signing agreement",
+            "Final review",
+            "Pending payments",
+            "Loan issued",
+        }
+
+    if current_status == "Loan issued" and next_status in KPI_ACTIVE_PIPELINE_STATUSES:
+        return False
+
+    return True
+
+
+def _next_pipeline_status(current_status: str) -> str | None:
+    if current_status not in KPI_ACTIVE_PIPELINE_STATUSES:
+        return None
+    index = APPLICATION_STATUSES.index(current_status)
+    if index + 1 < len(APPLICATION_STATUSES):
+        candidate = APPLICATION_STATUSES[index + 1]
+        if candidate in KPI_ACTIVE_PIPELINE_STATUSES:
+            return candidate
+    return None
+
+
+def _workflow_row_signature(row: sqlite3.Row) -> tuple:
+    return (
+        row["status"],
+        row["sub_status"],
+        row["risk_level"],
+        row["assigned_officer"] or "",
+        row["approval_notes"] or "",
+        int(row["flagged_fraud"] or 0),
+    )
+
+
+def _validate_workflow_form(data, current: sqlite3.Row | None = None) -> tuple[dict | None, str | None]:
     status = (data.get("status") or "").strip()
     if status not in APPLICATION_STATUSES:
-        return None
+        return None, "Select a valid workflow status."
 
     sub_status = _normalize_sub_status(data.get("sub_status", ""))
     if (data.get("sub_status") or "").strip() and sub_status is None:
-        return None
+        return None, "Select a valid sub-status or leave it blank."
 
     risk_level = (data.get("risk_level") or "").strip()
     if risk_level not in APPLICATION_RISK_LEVELS:
-        return None
+        return None, "Select a valid risk level."
 
-    assigned_officer = (data.get("assigned_officer") or "").strip()
-    if len(assigned_officer) > MAX_ASSIGNED_OFFICER_LENGTH:
-        return None
+    assigned_officer = _normalize_officer_name(data.get("assigned_officer", ""))
+    if (data.get("assigned_officer") or "").strip() and not assigned_officer:
+        return None, "Officer name can only include letters, numbers, spaces, and . ' -"
 
     approval_notes = (data.get("approval_notes") or "").strip()
     if len(approval_notes) > MAX_APPROVAL_NOTES_LENGTH:
-        return None
+        return None, f"Notes must be {MAX_APPROVAL_NOTES_LENGTH} characters or fewer."
 
-    return {
+    if current is not None and not _is_allowed_status_transition(current["status"], status):
+        return (
+            None,
+            f"Cannot move directly from “{current['status']}” to “{status}”. "
+            "Use an allowed intermediate stage or reopen from Rejected.",
+        )
+
+    workflow = {
         "status": status,
         "sub_status": sub_status,
         "risk_level": risk_level,
@@ -720,6 +821,142 @@ def _validate_workflow_form(data) -> dict | None:
         "approval_notes": approval_notes,
         "flagged_fraud": _parse_flagged_fraud(data.get("flagged_fraud", "")),
     }
+
+    if current is not None:
+        proposed = (
+            workflow["status"],
+            workflow["sub_status"],
+            workflow["risk_level"],
+            workflow["assigned_officer"],
+            workflow["approval_notes"],
+            workflow["flagged_fraud"],
+        )
+        if proposed == _workflow_row_signature(current):
+            return None, "No workflow changes were detected."
+
+    return workflow, None
+
+
+def _apply_workflow_quick_action(form_data, current: sqlite3.Row) -> tuple[dict | None, str | None]:
+    action = (form_data.get("workflow_action") or "").strip()
+    if not action:
+        return None, None
+
+    payload = {
+        "status": current["status"],
+        "sub_status": current["sub_status"] or "",
+        "risk_level": current["risk_level"],
+        "assigned_officer": current["assigned_officer"] or "",
+        "approval_notes": current["approval_notes"] or "",
+        "flagged_fraud": "1" if current["flagged_fraud"] else "",
+    }
+
+    if action == "advance_status":
+        next_status = _next_pipeline_status(current["status"])
+        if not next_status:
+            return None, "This application is not in a stage that can be advanced."
+        payload["status"] = next_status
+        payload["sub_status"] = ""
+    elif action == "margin_to_act":
+        payload["sub_status"] = KPI_OPS_REVIEW_SUB_STATUS
+    elif action == "clear_sub_status":
+        payload["sub_status"] = ""
+    elif action == "mark_high_risk":
+        payload["risk_level"] = "High"
+    elif action == "clear_fraud_flag":
+        payload["flagged_fraud"] = ""
+    else:
+        return None, "Unknown quick action."
+
+    return _validate_workflow_form(payload, current)
+
+
+def _filters_have_constraints(filters: dict) -> bool:
+    return any(filters.get(key) for key in ADMIN_LIST_FILTER_KEYS)
+
+
+def _active_filter_chips(filters: dict) -> list[dict]:
+    chips: list[dict] = []
+    preset = filters.get("preset") or ""
+    if preset in ADMIN_FILTER_PRESETS:
+        chips.append(
+            {
+                "label": ADMIN_FILTER_PRESETS[preset],
+                "clear_url": url_for("admin", **{k: v for k, v in _filters_to_query_params(filters).items() if k != "preset"}),
+            }
+        )
+    if filters.get("status"):
+        chips.append(
+            {
+                "label": f"Status: {filters['status']}",
+                "clear_url": url_for("admin", **{k: v for k, v in _filters_to_query_params(filters).items() if k != "status"}),
+            }
+        )
+    if filters.get("sub_status"):
+        chips.append(
+            {
+                "label": f"Sub-status: {filters['sub_status']}",
+                "clear_url": url_for("admin", **{k: v for k, v in _filters_to_query_params(filters).items() if k != "sub_status"}),
+            }
+        )
+    if filters.get("risk_level"):
+        chips.append(
+            {
+                "label": f"Risk: {filters['risk_level']}",
+                "clear_url": url_for("admin", **{k: v for k, v in _filters_to_query_params(filters).items() if k != "risk_level"}),
+            }
+        )
+    if filters.get("flagged_fraud") == "1":
+        chips.append(
+            {
+                "label": "Fraud flagged",
+                "clear_url": url_for("admin", **{k: v for k, v in _filters_to_query_params(filters).items() if k != "flagged_fraud"}),
+            }
+        )
+    elif filters.get("flagged_fraud") == "0":
+        chips.append(
+            {
+                "label": "Not fraud flagged",
+                "clear_url": url_for("admin", **{k: v for k, v in _filters_to_query_params(filters).items() if k != "flagged_fraud"}),
+            }
+        )
+    if filters.get("assigned_officer"):
+        chips.append(
+            {
+                "label": f"Officer: {filters['assigned_officer']}",
+                "clear_url": url_for(
+                    "admin",
+                    **{k: v for k, v in _filters_to_query_params(filters).items() if k != "assigned_officer"},
+                ),
+            }
+        )
+    if filters.get("q"):
+        chips.append(
+            {
+                "label": f"Search: “{filters['q']}”",
+                "clear_url": url_for("admin", **{k: v for k, v in _filters_to_query_params(filters).items() if k != "q"}),
+            }
+        )
+    return chips
+
+
+def _safe_return_url(candidate: str | None) -> str:
+    value = (candidate or "").strip()
+    if value.startswith("/admin"):
+        return value
+    return url_for("admin")
+
+
+def _application_needs_attention(row) -> bool:
+    if row["flagged_fraud"]:
+        return True
+    if row["risk_level"] in KPI_HIGH_RISK_LEVELS:
+        return True
+    if row["sub_status"] == KPI_OPS_REVIEW_SUB_STATUS:
+        return True
+    if row["status"] in KPI_ACTIVE_PIPELINE_STATUSES and not (row["assigned_officer"] or "").strip():
+        return True
+    return False
 
 
 @app.route('/')
@@ -807,6 +1044,8 @@ def admin_overview():
         recent_applications=recent_applications,
         attention_applications=attention_applications,
         active_nav="overview",
+        page_title="Operations Overview",
+        portfolio_empty=kpis["total_applications"] == 0,
     )
 
 
@@ -867,6 +1106,9 @@ def admin():
     if not filter_preset_label and filters.get("flagged_fraud") == "1":
         filter_preset_label = "Fraud-flagged applications"
 
+    portfolio_empty = kpis["total_applications"] == 0
+    filters_active = _filters_have_constraints(filters)
+
     return render_template(
         "dashboard.html",
         applications=applications,
@@ -876,11 +1118,15 @@ def admin():
         pagination=pagination,
         filter_query=_filters_to_query_params(filters),
         filter_preset_label=filter_preset_label,
+        active_filter_chips=_active_filter_chips(filters),
+        filters_active=filters_active,
+        portfolio_empty=portfolio_empty,
         statuses=APPLICATION_STATUSES,
         sub_statuses=APPLICATION_SUB_STATUSES,
         risk_levels=APPLICATION_RISK_LEVELS,
         officers=officers,
         active_nav="applications",
+        page_title="Applications",
     )
 
 
@@ -892,6 +1138,7 @@ def admin_application_detail(application_id: int):
         return Response("Application not found.", status=404)
 
     csrf_token = _ensure_session_csrf_token()
+    next_status = _next_pipeline_status(application["status"])
     return render_template(
         "application_detail.html",
         application=application,
@@ -899,7 +1146,11 @@ def admin_application_detail(application_id: int):
         statuses=APPLICATION_STATUSES,
         sub_statuses=APPLICATION_SUB_STATUSES,
         risk_levels=APPLICATION_RISK_LEVELS,
+        next_pipeline_status=next_status,
+        needs_attention=_application_needs_attention(application),
         active_nav="applications",
+        page_title=f"Application #{application_id}",
+        list_return_url=_safe_return_url(request.args.get("return")),
     )
 
 
@@ -914,9 +1165,19 @@ def admin_application_workflow(application_id: int):
     if application is None:
         return Response("Application not found.", status=404)
 
-    workflow = _validate_workflow_form(request.form)
+    action = (request.form.get("workflow_action") or "").strip()
+    if action:
+        workflow, validation_error = _apply_workflow_quick_action(request.form, application)
+    else:
+        workflow, validation_error = _validate_workflow_form(request.form, application)
+
+    if validation_error:
+        category = "info" if validation_error.startswith("No workflow changes") else "error"
+        flash(validation_error, category)
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
     if workflow is None:
-        flash("Invalid workflow data. No changes were saved.", "error")
+        flash("Could not save workflow changes. Check the form and try again.", "error")
         return redirect(url_for("admin_application_detail", application_id=application_id))
 
     conn = _get_db_connection()
@@ -947,7 +1208,10 @@ def admin_application_workflow(application_id: int):
     conn.commit()
     conn.close()
 
-    flash("Workflow updated successfully.", "success")
+    flash(
+        f"Workflow saved for application #{application_id} — status is now “{workflow['status']}”.",
+        "success",
+    )
     return redirect(url_for("admin_application_detail", application_id=application_id))
 
 

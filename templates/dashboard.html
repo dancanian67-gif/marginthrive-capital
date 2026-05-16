@@ -1,10 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Applications — MarginThrive Admin</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    {% include 'partials/dashboard_head.html' %}
 </head>
 <body>
 
@@ -18,6 +15,8 @@
                     <h1 class="dashboard-title">Applications Dashboard</h1>
                     <p class="dashboard-subtitle">Operational control center</p>
                 </header>
+
+                {% include 'partials/dashboard_flash.html' %}
 
                 <div class="dashboard-kpi-grid">
                     {% set application_kpis = [
@@ -33,7 +32,7 @@
                     {% endfor %}
                 </div>
 
-                {% if filter_preset_label %}
+                {% if filter_preset_label and not active_filter_chips %}
                 <div class="dashboard-insight-panel dashboard-filter-preset-banner">
                     <p>
                         Showing <strong>{{ filter_preset_label }}</strong> from overview drill-down.
@@ -42,9 +41,14 @@
                 </div>
                 {% endif %}
 
+                {% include 'partials/dashboard_active_filters.html' %}
+
                 <div class="dashboard-glass dashboard-card dashboard-filters-card">
                     <h2 class="dashboard-panel-title">Filter &amp; search</h2>
                     <form class="dashboard-filters-form" method="GET" action="{{ url_for('admin') }}">
+                        {% if filters.preset %}
+                        <input type="hidden" name="preset" value="{{ filters.preset }}">
+                        {% endif %}
                         <div class="dashboard-filters-grid">
                             <div class="dashboard-form-row">
                                 <label for="filter-status">Status</label>
@@ -91,6 +95,7 @@
                                     value="{{ filters.assigned_officer }}"
                                     placeholder="Officer name"
                                     maxlength="150"
+                                    autocomplete="off"
                                 >
                                 <datalist id="officer-options">
                                     {% for officer in officers %}
@@ -112,34 +117,45 @@
                         </div>
                         <div class="dashboard-form-actions">
                             <button type="submit" class="dashboard-btn-primary">Apply filters</button>
-                            <a class="dashboard-btn-secondary" href="{{ url_for('admin') }}">Clear</a>
+                            <a class="dashboard-btn-secondary" href="{{ url_for('admin') }}">Clear all</a>
                         </div>
                     </form>
                 </div>
 
                 <div class="dashboard-results-meta">
+                    {% if portfolio_empty %}
+                    <p>No applications in the portfolio yet.</p>
+                    {% elif pagination.total_matching == 0 and filters_active %}
+                    <p>No applications match the current filters.</p>
+                    {% else %}
                     <p>
                         Showing
-                        {% if applications %}
                         {{ applications|length }}
-                        {% else %}
-                        0
-                        {% endif %}
                         of {{ pagination.total_matching }} matching
                         {% if pagination.total_matching == 1 %}application{% else %}applications{% endif %}
                     </p>
+                    {% endif %}
                 </div>
 
-                <div class="dashboard-glass dashboard-card dashboard-table-container">
-                    <table class="dashboard-table">
+                <div class="dashboard-glass dashboard-card dashboard-table-container dashboard-table-scroll">
+                    {% if portfolio_empty %}
+                    {% with title='No applications yet', description='New submissions from the public site will appear here for review.', action_url=url_for('admin_overview'), action_label='View overview' %}
+                    {% include 'partials/dashboard_empty_state.html' %}
+                    {% endwith %}
+                    {% elif pagination.total_matching == 0 %}
+                    {% with title='No matching applications', description='Try clearing filters or broadening your search terms.', action_url=url_for('admin'), action_label='Clear all filters' %}
+                    {% include 'partials/dashboard_empty_state.html' %}
+                    {% endwith %}
+                    {% else %}
+                    <table class="dashboard-table dashboard-table-sticky">
                         <thead>
                         <tr>
                             <th>ID</th>
                             <th>Business</th>
-                            <th>Owner</th>
-                            <th>Email</th>
-                            <th>Revenue</th>
-                            <th>Product</th>
+                            <th class="dashboard-table-hide-sm">Owner</th>
+                            <th class="dashboard-table-hide-sm">Email</th>
+                            <th class="dashboard-table-hide-md">Revenue</th>
+                            <th class="dashboard-table-hide-md">Product</th>
                             <th>Status</th>
                             <th>Risk</th>
                             <th>Fraud</th>
@@ -148,41 +164,11 @@
                         </thead>
                         <tbody>
                         {% for app in applications %}
-                        <tr>
-                            <td>{{ app['id'] }}</td>
-                            <td>{{ app['business_name'] }}</td>
-                            <td>{{ app['owner_name'] }}</td>
-                            <td>{{ app['email'] }}</td>
-                            <td>{{ app['revenue'] }}</td>
-                            <td>{{ app['product'] }}</td>
-                            <td>
-                                <span class="dashboard-badge {{ dashboard_status_badge_class(app['status']) }}">
-                                    {{ app['status'] }}
-                                </span>
-                            </td>
-                            <td>
-                                <span class="dashboard-badge {{ dashboard_risk_badge_class(app['risk_level']) }}">
-                                    {{ app['risk_level'] }}
-                                </span>
-                            </td>
-                            <td>
-                                {% if app['flagged_fraud'] %}
-                                <span class="dashboard-badge dashboard-badge-fraud">Flagged</span>
-                                {% else %}
-                                <span class="dashboard-badge dashboard-badge-fraud-clear">Clear</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <a class="dashboard-link" href="{{ url_for('admin_application_detail', application_id=app['id']) }}">Review</a>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="10" class="dashboard-table-empty">No applications match your filters.</td>
-                        </tr>
+                        {% include 'partials/dashboard_application_row.html' %}
                         {% endfor %}
                         </tbody>
                     </table>
+                    {% endif %}
                 </div>
 
                 {% if pagination.total_pages > 1 %}

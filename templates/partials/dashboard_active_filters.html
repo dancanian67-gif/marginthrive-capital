@@ -1,0 +1,11 @@
+{% if active_filter_chips %}
+<div class="dashboard-active-filters" aria-label="Active filters">
+    {% for chip in active_filter_chips %}
+    <span class="dashboard-filter-chip">
+        {{ chip.label }}
+        <a class="dashboard-filter-chip-remove" href="{{ chip.clear_url }}" title="Remove filter">×</a>
+    </span>
+    {% endfor %}
+    <a class="dashboard-link dashboard-filter-clear-all" href="{{ url_for('admin') }}">Clear all</a>
+</div>
+{% endif %}

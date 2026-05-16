@@ -1,10 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Operations Overview — MarginThrive Admin</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    {% set page_title = page_title|default('Operations Overview') %}
+    {% include 'partials/dashboard_head.html' %}
 </head>
 <body>
 
@@ -18,6 +16,14 @@
                     <h1 class="dashboard-title">Operations Overview</h1>
                     <p class="dashboard-subtitle">Executive visibility across the financing portfolio</p>
                 </header>
+
+                {% include 'partials/dashboard_flash.html' %}
+
+                {% if portfolio_empty %}
+                {% with title='Portfolio is empty', description='Submit a test application from the public site to populate operational views.', action_url=url_for('admin'), action_label='Open applications' %}
+                {% include 'partials/dashboard_empty_state.html' %}
+                {% endwith %}
+                {% endif %}
 
                 <div class="dashboard-kpi-grid dashboard-kpi-grid-executive">
                     {% set executive_kpis = [

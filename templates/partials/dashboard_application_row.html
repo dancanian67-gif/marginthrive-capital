@@ -1,0 +1,31 @@
+<tr class="{{ dashboard_table_row_class(app) }}">
+    <td data-label="ID">{{ app['id'] }}</td>
+    <td data-label="Business">{{ app['business_name'] }}</td>
+    <td data-label="Owner" class="dashboard-table-hide-sm">{{ app['owner_name'] }}</td>
+    <td data-label="Email" class="dashboard-table-hide-sm">{{ app['email'] }}</td>
+    <td data-label="Revenue" class="dashboard-table-hide-md">{{ app['revenue'] }}</td>
+    <td data-label="Product" class="dashboard-table-hide-md">{{ app['product'] }}</td>
+    <td data-label="Status">
+        <span class="dashboard-badge {{ dashboard_status_badge_class(app['status']) }}">
+            {{ app['status'] }}
+        </span>
+        {% if app['sub_status'] %}
+        <span class="dashboard-badge dashboard-badge-sub-status">{{ app['sub_status'] }}</span>
+        {% endif %}
+    </td>
+    <td data-label="Risk">
+        <span class="dashboard-badge {{ dashboard_risk_badge_class(app['risk_level']) }}">
+            {{ app['risk_level'] }}
+        </span>
+    </td>
+    <td data-label="Fraud">
+        {% if app['flagged_fraud'] %}
+        <span class="dashboard-badge dashboard-badge-fraud">Flagged</span>
+        {% else %}
+        <span class="dashboard-badge dashboard-badge-fraud-clear">Clear</span>
+        {% endif %}
+    </td>
+    <td data-label="Action">
+        <a class="dashboard-link" href="{{ url_for('admin_application_detail', application_id=app['id'], return=request.full_path) }}">Review</a>
+    </td>
+</tr>
