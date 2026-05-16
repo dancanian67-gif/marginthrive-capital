@@ -118,6 +118,9 @@
                         <div class="dashboard-form-actions">
                             <button type="submit" class="dashboard-btn-primary">Apply filters</button>
                             <a class="dashboard-btn-secondary" href="{{ url_for('admin') }}">Clear all</a>
+                            {% if not portfolio_empty and pagination.total_matching > 0 %}
+                            <a class="dashboard-btn-secondary dashboard-export-btn" href="{{ export_applications_url }}">↓ Export CSV</a>
+                            {% endif %}
                         </div>
                     </form>
                 </div>

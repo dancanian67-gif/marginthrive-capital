@@ -1,0 +1,10 @@
+<div class="dashboard-export-actions" role="group" aria-label="CSV exports">
+    {% if export_title %}
+    <p class="dashboard-export-title">{{ export_title }}</p>
+    {% endif %}
+    <div class="dashboard-export-buttons">
+        {% for label, href in export_links %}
+        <a class="dashboard-btn-secondary dashboard-export-btn" href="{{ href }}">↓ {{ label }}</a>
+        {% endfor %}
+    </div>
+</div>

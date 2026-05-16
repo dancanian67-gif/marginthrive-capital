@@ -1,5 +1,7 @@
 import base64
+import csv
 import hmac
+import io
 import json
 import os
 from datetime import date, timedelta
@@ -165,6 +167,52 @@ QUICK_ACTION_AUDIT_TYPES = {
 QUICK_ACTIONS_REQUIRING_AUDIT_NOTE = frozenset({"mark_high_risk", "clear_fraud_flag"})
 
 SENSITIVE_AUDIT_STATUSES = frozenset({"Management approval", "Rejected", "Loan issued"})
+
+REPORT_EXPORT_MAX_ROWS = 10000
+
+REPORT_EXPORT_TYPES = frozenset(
+    {
+        "operational",
+        "pipeline",
+        "outcomes",
+        "risk",
+        "fraud",
+        "officers",
+        "backlog",
+    }
+)
+
+APPLICATION_EXPORT_COLUMNS = (
+    ("id", "id"),
+    ("business_name", "business_name"),
+    ("owner_name", "owner_name"),
+    ("email", "email"),
+    ("revenue", "revenue"),
+    ("product", "product"),
+    ("status", "status"),
+    ("sub_status", "sub_status"),
+    ("risk_level", "risk_level"),
+    ("flagged_fraud", "flagged_fraud"),
+    ("assigned_officer", "assigned_officer"),
+    ("created_at", "created_at"),
+    ("updated_at", "updated_at"),
+)
+
+AUDIT_EXPORT_COLUMNS = (
+    ("id", "id"),
+    ("application_id", "application_id"),
+    ("business_name", "business_name"),
+    ("batch_id", "batch_id"),
+    ("action_type", "action_type"),
+    ("field_name", "field_name"),
+    ("old_value", "old_value"),
+    ("new_value", "new_value"),
+    ("actor", "actor"),
+    ("context_notes", "context_notes"),
+    ("is_critical", "is_critical"),
+    ("transition_warning", "transition_warning"),
+    ("created_at", "created_at"),
+)
 
 # ALTER TABLE only allows constant defaults; timestamps are backfilled after add.
 APPLICATIONS_SCHEMA_COLUMNS = (
@@ -1549,6 +1597,280 @@ def _analytics_range_query(range_key: str) -> dict:
     return {"range": range_key}
 
 
+def _make_csv_response(filename: str, columns: tuple[tuple[str, str], ...], rows: list[dict]) -> Response:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([header for header, _key in columns])
+    for row in rows:
+        writer.writerow([row.get(key, "") for _header, key in columns])
+    payload = buffer.getvalue()
+    return Response(
+        payload,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _make_sectioned_csv_response(filename: str, sections: list[tuple[str, tuple[tuple[str, str], ...], list[dict]]]) -> Response:
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    for index, (title, columns, rows) in enumerate(sections):
+        if index:
+            writer.writerow([])
+        writer.writerow([f"# {title}"])
+        writer.writerow([header for header, _key in columns])
+        for row in rows:
+            writer.writerow([row.get(key, "") for _header, key in columns])
+    return Response(
+        buffer.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _distribution_export_rows(items: list[dict], label_key: str = "label") -> list[dict]:
+    return [
+        {
+            "label": item[label_key],
+            "count": item["count"],
+            "share_pct": item.get("share", ""),
+        }
+        for item in items
+    ]
+
+
+def _fetch_applications_for_export(
+    cursor,
+    where_sql: str,
+    where_params: list,
+    limit: int = REPORT_EXPORT_MAX_ROWS,
+) -> list[dict]:
+    cursor.execute(
+        f"""
+        SELECT
+            id,
+            business_name,
+            owner_name,
+            email,
+            revenue,
+            product,
+            status,
+            sub_status,
+            risk_level,
+            flagged_fraud,
+            assigned_officer,
+            created_at,
+            updated_at
+        FROM applications
+        {where_sql}
+        ORDER BY id DESC
+        LIMIT ?
+        """,
+        (*where_params, limit),
+    )
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def _fetch_audit_history_for_export(
+    cursor,
+    range_key: str,
+    application_id: int | None = None,
+    limit: int = REPORT_EXPORT_MAX_ROWS,
+) -> list[dict]:
+    created_clause, created_params = _analytics_datetime_clause(range_key, "wh.created_at")
+    application_clause = ""
+    application_params: list = []
+    if application_id is not None:
+        application_clause = " AND wh.application_id = ?"
+        application_params.append(application_id)
+
+    cursor.execute(
+        f"""
+        SELECT
+            wh.id,
+            wh.application_id,
+            COALESCE(a.business_name, '') AS business_name,
+            wh.batch_id,
+            wh.action_type,
+            wh.field_name,
+            wh.old_value,
+            wh.new_value,
+            wh.actor,
+            wh.context_notes,
+            wh.is_critical,
+            wh.transition_warning,
+            wh.created_at
+        FROM workflow_history wh
+        LEFT JOIN applications a ON a.id = wh.application_id
+        WHERE wh.created_at IS NOT NULL AND wh.created_at != ''{created_clause}{application_clause}
+        ORDER BY datetime(wh.created_at) DESC, wh.id DESC
+        LIMIT ?
+        """,
+        (*created_params, *application_params, limit),
+    )
+    return [dict(row) for row in cursor.fetchall()]
+
+
+def _fetch_governance_audit_summary(cursor, range_key: str) -> dict:
+    created_clause, created_params = _analytics_datetime_clause(range_key, "created_at")
+    cursor.execute(
+        f"""
+        SELECT
+            COUNT(*) AS total_events,
+            SUM(CASE WHEN is_critical = 1 THEN 1 ELSE 0 END) AS critical_events,
+            COUNT(DISTINCT batch_id) AS workflow_batches,
+            COUNT(DISTINCT actor) AS unique_operators,
+            COUNT(DISTINCT application_id) AS applications_touched
+        FROM workflow_history
+        WHERE created_at IS NOT NULL AND created_at != ''{created_clause}
+        """,
+        created_params,
+    )
+    row = cursor.fetchone()
+    return {
+        "total_events": row["total_events"] or 0,
+        "critical_events": row["critical_events"] or 0,
+        "workflow_batches": row["workflow_batches"] or 0,
+        "unique_operators": row["unique_operators"] or 0,
+        "applications_touched": row["applications_touched"] or 0,
+    }
+
+
+def _fetch_fraud_review_summary(cursor) -> dict:
+    cursor.execute(
+        """
+        SELECT
+            COUNT(*) AS fraud_flagged_total,
+            SUM(CASE WHEN status IN ({}) THEN 1 ELSE 0 END) AS fraud_in_pipeline
+        FROM applications
+        WHERE flagged_fraud = 1
+        """.format(", ".join("?" * len(KPI_ACTIVE_PIPELINE_STATUSES))),
+        KPI_ACTIVE_PIPELINE_STATUSES,
+    )
+    row = cursor.fetchone()
+    return {
+        "fraud_flagged_total": row["fraud_flagged_total"] or 0,
+        "fraud_in_pipeline": row["fraud_in_pipeline"] or 0,
+    }
+
+
+def _report_executive_summary(
+    portfolio_kpis: dict,
+    period_kpis: dict,
+    backlog: dict,
+    governance: dict,
+    range_label: str,
+) -> list[str]:
+    lines = [
+        f"Reporting period: {range_label}.",
+        (
+            f"Portfolio: {portfolio_kpis['total_applications']} applications, "
+            f"{portfolio_kpis['active_pipeline']} in active pipeline, "
+            f"{portfolio_kpis['fraud_flagged']} fraud-flagged."
+        ),
+        (
+            f"Period intake: {period_kpis['total_applications']} created; "
+            f"{period_kpis['approved']} approved-stage, {period_kpis['rejected']} rejected, "
+            f"{period_kpis['high_risk']} high/critical risk."
+        ),
+    ]
+    if backlog["bottleneck_stage"]:
+        lines.append(
+            f"Live backlog bottleneck: {backlog['bottleneck_stage']} "
+            f"({backlog['bottleneck_count']} cases)."
+        )
+    if governance["workflow_batches"]:
+        lines.append(
+            f"Governance: {governance['workflow_batches']} workflow batches, "
+            f"{governance['critical_events']} critical audit events in period."
+        )
+    return lines[:6]
+
+
+def _build_reports_page_data(cursor, range_key: str) -> dict:
+    portfolio_kpis = _fetch_executive_kpis(cursor)
+    period_kpis = _fetch_analytics_period_kpis(cursor, range_key)
+    status_distribution = _fetch_analytics_distribution(
+        cursor, range_key, group_column="status", order_values=APPLICATION_STATUSES
+    )
+    risk_distribution = _fetch_analytics_distribution(
+        cursor, range_key, group_column="risk_level", order_values=APPLICATION_RISK_LEVELS
+    )
+    pipeline_distribution = _fetch_analytics_pipeline_distribution(cursor, range_key)
+    officer_workload = _fetch_analytics_officer_workload(cursor, range_key)
+    backlog = _fetch_analytics_backlog_snapshot(cursor)
+    activity_summary = _fetch_analytics_activity_summary(cursor, range_key)
+    governance = _fetch_governance_audit_summary(cursor, range_key)
+    fraud_summary = _fetch_fraud_review_summary(cursor)
+
+    portfolio_status = _fetch_status_distribution(cursor)
+    portfolio_risk = _fetch_risk_distribution(cursor)
+    total_portfolio = portfolio_kpis["total_applications"] or 1
+    for item in portfolio_status:
+        item["share"] = round((item["count"] / total_portfolio) * 100, 1)
+    for item in portfolio_risk:
+        item["share"] = round((item["count"] / total_portfolio) * 100, 1)
+
+    outcome_summary = {
+        "portfolio_approved": portfolio_kpis["approved"],
+        "portfolio_rejected": portfolio_kpis["rejected"],
+        "portfolio_pipeline": portfolio_kpis["active_pipeline"],
+        "period_approved": period_kpis["approved"],
+        "period_rejected": period_kpis["rejected"],
+        "period_pipeline": period_kpis["active_pipeline"],
+        "period_total": period_kpis["total_applications"],
+    }
+    if period_kpis["total_applications"]:
+        outcome_summary["period_rejection_rate"] = round(
+            (period_kpis["rejected"] / period_kpis["total_applications"]) * 100,
+            1,
+        )
+    else:
+        outcome_summary["period_rejection_rate"] = 0.0
+
+    executive_lines = _report_executive_summary(
+        portfolio_kpis,
+        period_kpis,
+        backlog,
+        governance,
+        ANALYTICS_TIME_RANGES[range_key],
+    )
+
+    return {
+        "portfolio_kpis": portfolio_kpis,
+        "period_kpis": period_kpis,
+        "status_distribution": status_distribution,
+        "risk_distribution": risk_distribution,
+        "pipeline_distribution": pipeline_distribution,
+        "portfolio_status": portfolio_status,
+        "portfolio_risk": portfolio_risk,
+        "officer_workload": officer_workload,
+        "backlog": backlog,
+        "activity_summary": activity_summary,
+        "governance": governance,
+        "fraud_summary": fraud_summary,
+        "outcome_summary": outcome_summary,
+        "executive_lines": executive_lines,
+    }
+
+
+def _report_export_urls(range_key: str, filter_query: dict | None = None) -> dict[str, str]:
+    range_params = {"range": range_key}
+    filter_params = {**(filter_query or {}), **range_params}
+    return {
+        "operational": url_for("admin_export_report", report_type="operational", **range_params),
+        "pipeline": url_for("admin_export_report", report_type="pipeline", **range_params),
+        "outcomes": url_for("admin_export_report", report_type="outcomes", **range_params),
+        "risk": url_for("admin_export_report", report_type="risk", **range_params),
+        "fraud": url_for("admin_export_report", report_type="fraud", **range_params),
+        "officers": url_for("admin_export_report", report_type="officers", **range_params),
+        "backlog": url_for("admin_export_report", report_type="backlog", **range_params),
+        "audit": url_for("admin_export_audit", **range_params),
+        "applications_filtered": url_for("admin_export_applications", **filter_params),
+        "applications_all": url_for("admin_export_applications", **range_params),
+    }
+
+
 @app.template_global()
 def dashboard_risk_badge_class(risk_level: str) -> str:
     mapping = {
@@ -1999,6 +2321,7 @@ def admin_analytics():
         range_key=range_key,
         range_label=ANALYTICS_TIME_RANGES[range_key],
         time_ranges=ANALYTICS_TIME_RANGES,
+        export_urls=_report_export_urls(range_key),
         period_kpis=period_kpis,
         intake_trend=intake_trend,
         fraud_trend=fraud_trend,
@@ -2019,11 +2342,192 @@ def admin_analytics():
 @app.route("/admin/reports")
 @require_admin_auth
 def admin_reports():
+    range_key = _parse_analytics_range(request.args)
+
+    conn = _get_db_connection()
+    cursor = conn.cursor()
+    report_data = _build_reports_page_data(cursor, range_key)
+    conn.close()
+
     return render_template(
         "reports.html",
         active_nav="reports",
-        page_title="Reports",
+        page_title="Operational Reports",
+        range_key=range_key,
+        range_label=ANALYTICS_TIME_RANGES[range_key],
+        time_ranges=ANALYTICS_TIME_RANGES,
+        export_urls=_report_export_urls(range_key),
+        portfolio_empty=report_data["portfolio_kpis"]["total_applications"] == 0,
+        **report_data,
     )
+
+
+@app.route("/admin/export/applications")
+@require_admin_auth
+def admin_export_applications():
+    filters = _parse_admin_list_filters(request.args)
+    where_sql, where_params = _build_applications_where(filters)
+
+    conn = _get_db_connection()
+    cursor = conn.cursor()
+    rows = _fetch_applications_for_export(cursor, where_sql, where_params)
+    conn.close()
+
+    suffix = "filtered" if _filters_have_constraints(filters) else "all"
+    return _make_csv_response(f"applications_{suffix}.csv", APPLICATION_EXPORT_COLUMNS, rows)
+
+
+@app.route("/admin/export/audit")
+@require_admin_auth
+def admin_export_audit():
+    range_key = _parse_analytics_range(request.args)
+    application_id = None
+    raw_id = (request.args.get("application_id") or "").strip()
+    if raw_id.isdigit():
+        application_id = int(raw_id)
+
+    conn = _get_db_connection()
+    cursor = conn.cursor()
+    rows = _fetch_audit_history_for_export(cursor, range_key, application_id)
+    conn.close()
+
+    filename = f"audit_history_{range_key}"
+    if application_id is not None:
+        filename += f"_app_{application_id}"
+    return _make_csv_response(f"{filename}.csv", AUDIT_EXPORT_COLUMNS, rows)
+
+
+@app.route("/admin/export/report/<report_type>")
+@require_admin_auth
+def admin_export_report(report_type: str):
+    if report_type not in REPORT_EXPORT_TYPES:
+        return Response("Unknown report type.", status=404)
+
+    range_key = _parse_analytics_range(request.args)
+    conn = _get_db_connection()
+    cursor = conn.cursor()
+    data = _build_reports_page_data(cursor, range_key)
+    conn.close()
+
+    dist_columns = (("label", "label"), ("count", "count"), ("share_pct", "share_pct"))
+    metric_columns = (("metric", "metric"), ("value", "value"))
+
+    if report_type == "pipeline":
+        rows = _distribution_export_rows(data["pipeline_distribution"])
+        return _make_csv_response(f"pipeline_summary_{range_key}.csv", dist_columns, rows)
+
+    if report_type == "risk":
+        sections = [
+            ("Period risk (created in range)", dist_columns, _distribution_export_rows(data["risk_distribution"])),
+            ("Portfolio risk (live)", dist_columns, _distribution_export_rows(data["portfolio_risk"])),
+        ]
+        return _make_sectioned_csv_response(f"risk_exposure_{range_key}.csv", sections)
+
+    if report_type == "outcomes":
+        outcome = data["outcome_summary"]
+        rows = [
+            {"metric": "Portfolio — active pipeline", "value": outcome["portfolio_pipeline"]},
+            {"metric": "Portfolio — approved", "value": outcome["portfolio_approved"]},
+            {"metric": "Portfolio — rejected", "value": outcome["portfolio_rejected"]},
+            {"metric": f"Period ({range_key}) — applications created", "value": outcome["period_total"]},
+            {"metric": f"Period ({range_key}) — approved-stage created", "value": outcome["period_approved"]},
+            {"metric": f"Period ({range_key}) — rejected created", "value": outcome["period_rejected"]},
+            {"metric": f"Period ({range_key}) — rejection rate %", "value": outcome["period_rejection_rate"]},
+        ]
+        status_rows = _distribution_export_rows(data["status_distribution"])
+        sections = [
+            ("Approval and rejection summary", metric_columns, rows),
+            ("Period status distribution", dist_columns, status_rows),
+        ]
+        return _make_sectioned_csv_response(f"approval_outcomes_{range_key}.csv", sections)
+
+    if report_type == "fraud":
+        fraud = data["fraud_summary"]
+        summary_rows = [
+            {"metric": "Fraud-flagged (portfolio)", "value": fraud["fraud_flagged_total"]},
+            {"metric": "Fraud-flagged in active pipeline", "value": fraud["fraud_in_pipeline"]},
+            {"metric": f"Fraud-flagged created in period ({range_key})", "value": data["period_kpis"]["fraud_flagged"]},
+        ]
+        conn = _get_db_connection()
+        cursor = conn.cursor()
+        fraud_apps = _fetch_applications_for_export(
+            cursor,
+            " WHERE flagged_fraud = 1",
+            [],
+        )
+        conn.close()
+        sections = [
+            ("Fraud review summary", metric_columns, summary_rows),
+            ("Fraud-flagged applications", APPLICATION_EXPORT_COLUMNS, fraud_apps),
+        ]
+        return _make_sectioned_csv_response(f"fraud_review_{range_key}.csv", sections)
+
+    if report_type == "officers":
+        rows = [
+            {
+                "officer": item["officer"],
+                "total_count": item["total_count"],
+                "pipeline_count": item["pipeline_count"],
+                "fraud_count": item["fraud_count"],
+                "load_share_pct": item.get("load_share", ""),
+            }
+            for item in data["officer_workload"]
+        ]
+        officer_columns = (
+            ("officer", "officer"),
+            ("total_count", "total_count"),
+            ("pipeline_count", "pipeline_count"),
+            ("fraud_count", "fraud_count"),
+            ("load_share_pct", "load_share_pct"),
+        )
+        return _make_csv_response(f"officer_workload_{range_key}.csv", officer_columns, rows)
+
+    if report_type == "backlog":
+        rows = _distribution_export_rows(data["backlog"]["pipeline_backlog"])
+        summary_rows = [
+            {"metric": "Live pipeline backlog total", "value": data["backlog"]["pipeline_total"]},
+            {"metric": "Bottleneck stage", "value": data["backlog"]["bottleneck_stage"] or "—"},
+            {"metric": "Bottleneck count", "value": data["backlog"]["bottleneck_count"]},
+        ]
+        sections = [
+            ("Backlog summary", metric_columns, summary_rows),
+            ("Pipeline stage backlog", dist_columns, rows),
+        ]
+        return _make_sectioned_csv_response(f"operational_backlog_{range_key}.csv", sections)
+
+    # operational — bundled executive export
+    gov = data["governance"]
+    executive_rows = [{"summary": line} for line in data["executive_lines"]]
+    governance_rows = [
+        {"metric": "Workflow batches in period", "value": gov["workflow_batches"]},
+        {"metric": "Audit events in period", "value": gov["total_events"]},
+        {"metric": "Critical audit events", "value": gov["critical_events"]},
+        {"metric": "Unique operators", "value": gov["unique_operators"]},
+        {"metric": "Applications with audit activity", "value": gov["applications_touched"]},
+        {"metric": "Workflow updates (distinct batches)", "value": data["activity_summary"]["updates_in_period"]},
+    ]
+    sections = [
+        ("Executive summary", (("summary", "summary"),), executive_rows),
+        ("Governance and audit", metric_columns, governance_rows),
+        ("Pipeline distribution (period)", dist_columns, _distribution_export_rows(data["pipeline_distribution"])),
+        (
+            "Officer workload (period)",
+            (
+                ("officer", "officer"),
+                ("pipeline_count", "pipeline_count"),
+                ("total_count", "total_count"),
+            ),
+            [
+                {
+                    "officer": item["officer"],
+                    "pipeline_count": item["pipeline_count"],
+                    "total_count": item["total_count"],
+                }
+                for item in data["officer_workload"]
+            ],
+        ),
+    ]
+    return _make_sectioned_csv_response(f"operational_report_{range_key}.csv", sections)
 
 
 @app.route('/admin')
@@ -2086,6 +2590,8 @@ def admin():
     portfolio_empty = kpis["total_applications"] == 0
     filters_active = _filters_have_constraints(filters)
 
+    filter_query = _filters_to_query_params(filters)
+
     return render_template(
         "dashboard.html",
         applications=applications,
@@ -2093,7 +2599,8 @@ def admin():
         kpis=kpis,
         kpi_links=_overview_drilldown_links(),
         pagination=pagination,
-        filter_query=_filters_to_query_params(filters),
+        filter_query=filter_query,
+        export_applications_url=url_for("admin_export_applications", **filter_query),
         filter_preset_label=filter_preset_label,
         active_filter_chips=_active_filter_chips(filters),
         filters_active=filters_active,
@@ -2139,6 +2646,11 @@ def admin_application_detail(application_id: int):
         timeline_batches=_group_workflow_history_batches(history_rows),
         admin_actor=getattr(g, "admin_actor", _get_request_actor()),
         status_transition_hint=status_transition_hint,
+        export_audit_url=url_for(
+            "admin_export_audit",
+            application_id=application_id,
+            range="all",
+        ),
         active_nav="applications",
         page_title=f"Application #{application_id}",
         list_return_url=_safe_return_url(request.args.get("return")),

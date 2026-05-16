@@ -33,3 +33,7 @@ Applications support operational fields (`status`, `sub_status`, timestamps, ris
 ## Operational audit (Phase B2)
 
 Workflow changes are recorded in `workflow_history` with operator attribution, optional governance notes, and a timeline on each application detail page. See [docs/WORKFLOW_SCHEMA.md](docs/WORKFLOW_SCHEMA.md#operational-audit-trail-phase-b2).
+
+## Reports & exports (Phase B3)
+
+Operational reports and CSV exports are available at `/admin/reports`, with filtered application exports from `/admin` and audit exports from application detail. See [docs/WORKFLOW_SCHEMA.md](docs/WORKFLOW_SCHEMA.md#operational-reports--exports-phase-b3).

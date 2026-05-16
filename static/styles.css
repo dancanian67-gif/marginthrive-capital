@@ -1865,3 +1865,108 @@ input, select {
     color: #f8fafc;
     font: inherit;
 }
+
+/* ===== OPERATIONAL REPORTS & EXPORTS (Phase B3) ===== */
+.dashboard-export-actions {
+    margin-bottom: var(--space-lg);
+    padding: var(--space-md);
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    background: rgba(15, 23, 42, 0.45);
+}
+
+.dashboard-export-title {
+    margin: 0 0 var(--space-sm);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.dashboard-export-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+}
+
+.dashboard-export-btn,
+.dashboard-export-btn-inline {
+    font-size: 0.85rem;
+}
+
+.dashboard-export-btn-inline {
+    margin-top: var(--space-md);
+    display: inline-flex;
+}
+
+.dashboard-report-executive {
+    margin-bottom: var(--space-lg);
+}
+
+.dashboard-report-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: var(--space-lg);
+}
+
+.dashboard-report-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.dashboard-report-card-span {
+    grid-column: 1 / -1;
+}
+
+.dashboard-report-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+}
+
+.dashboard-report-lead {
+    margin: 0;
+    color: #94a3b8;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.dashboard-report-stat-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+
+.dashboard-report-stat-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-md);
+    font-size: 0.9rem;
+    color: #cbd5e1;
+}
+
+.dashboard-report-stat-list strong {
+    color: #f8fafc;
+    font-weight: 600;
+}
+
+.dashboard-report-footnote {
+    margin: var(--space-md) 0 0;
+    font-size: 0.85rem;
+    color: #94a3b8;
+    line-height: 1.5;
+}
+
+.dashboard-history-header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-md);
+    flex-wrap: wrap;
+}

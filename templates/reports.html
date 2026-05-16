@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    {% set page_title = page_title|default('Reports') %}
+    {% set page_title = page_title|default('Operational Reports') %}
     {% include 'partials/dashboard_head.html' %}
 </head>
 <body>
@@ -13,24 +13,141 @@
         <main class="dashboard-shell dashboard-content dashboard-main">
             <section class="dashboard-section">
                 <header class="dashboard-section-header">
-                    <h1 class="dashboard-title">Reports</h1>
-                    <p class="dashboard-subtitle">Exportable reporting packs are planned for a later phase</p>
+                    <h1 class="dashboard-title">Operational Reports</h1>
+                    <p class="dashboard-subtitle">
+                        Export-ready summaries for <strong>{{ range_label }}</strong>
+                        · portfolio snapshot plus period-based workflow visibility
+                    </p>
                 </header>
 
-                <div class="dashboard-glass dashboard-card">
-                    <div class="dashboard-insight-panel">
-                        <p>
-                            Use <a class="dashboard-link" href="{{ url_for('admin_analytics') }}">Operational Analytics</a>
-                            for time-based financing intelligence. Scheduled PDF/CSV exports and executive report
-                            bundles will be added here when reporting workflows are defined.
-                        </p>
-                    </div>
-                    <p class="dashboard-empty-copy">
-                        Reports remain a lightweight placeholder so navigation reflects the product roadmap without
-                        duplicating analytics dashboards.
+                {% include 'partials/dashboard_flash.html' %}
+
+                {% set time_range_endpoint = 'admin_reports' %}
+                {% include 'partials/dashboard_time_range.html' %}
+
+                {% set export_links = [
+                    ('Full operational pack', export_urls.operational),
+                    ('Audit history CSV', export_urls.audit),
+                    ('All applications CSV', export_urls.applications_all),
+                ] %}
+                {% set export_title = 'Quick exports' %}
+                {% include 'partials/dashboard_export_actions.html' %}
+
+                {% if executive_lines %}
+                <div class="dashboard-insight-panel dashboard-report-executive">
+                    <h2 class="dashboard-panel-title">Executive summary</h2>
+                    <ul class="dashboard-insight-list">
+                        {% for line in executive_lines %}
+                        <li>{{ line }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </section>
+
+            <section class="dashboard-section dashboard-report-grid">
+                <div class="dashboard-glass dashboard-card dashboard-report-card">
+                    <header class="dashboard-report-card-header">
+                        <h2 class="dashboard-panel-title">Workflow pipeline</h2>
+                        <a class="dashboard-link" href="{{ export_urls.pipeline }}">Export CSV</a>
+                    </header>
+                    <p class="dashboard-report-lead">
+                        Live backlog: <strong>{{ backlog.pipeline_total }}</strong> cases
+                        {% if backlog.bottleneck_stage %}
+                        · bottleneck <strong>{{ backlog.bottleneck_stage }}</strong> ({{ backlog.bottleneck_count }})
+                        {% endif %}
+                    </p>
+                    <ul class="dashboard-report-stat-list">
+                        {% for item in backlog.pipeline_backlog %}
+                        <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
+                        {% endfor %}
+                    </ul>
+                    <a class="dashboard-btn-secondary dashboard-export-btn-inline" href="{{ export_urls.backlog }}">Export backlog report</a>
+                </div>
+
+                <div class="dashboard-glass dashboard-card dashboard-report-card">
+                    <header class="dashboard-report-card-header">
+                        <h2 class="dashboard-panel-title">Approval &amp; rejection</h2>
+                        <a class="dashboard-link" href="{{ export_urls.outcomes }}">Export CSV</a>
+                    </header>
+                    <dl class="dashboard-meta dashboard-meta-columns">
+                        <div><dt>Portfolio pipeline</dt><dd>{{ outcome_summary.portfolio_pipeline }}</dd></div>
+                        <div><dt>Portfolio approved</dt><dd>{{ outcome_summary.portfolio_approved }}</dd></div>
+                        <div><dt>Portfolio rejected</dt><dd>{{ outcome_summary.portfolio_rejected }}</dd></div>
+                        <div><dt>Created in period</dt><dd>{{ outcome_summary.period_total }}</dd></div>
+                        <div><dt>Period approved-stage</dt><dd>{{ outcome_summary.period_approved }}</dd></div>
+                        <div><dt>Period rejected</dt><dd>{{ outcome_summary.period_rejected }}</dd></div>
+                        <div><dt>Period rejection rate</dt><dd>{{ outcome_summary.period_rejection_rate }}%</dd></div>
+                    </dl>
+                </div>
+
+                <div class="dashboard-glass dashboard-card dashboard-report-card">
+                    <header class="dashboard-report-card-header">
+                        <h2 class="dashboard-panel-title">Risk exposure</h2>
+                        <a class="dashboard-link" href="{{ export_urls.risk }}">Export CSV</a>
+                    </header>
+                    <p class="dashboard-report-lead">
+                        Period high/critical: <strong>{{ period_kpis.high_risk }}</strong>
+                        · portfolio high/critical: <strong>{{ portfolio_kpis.high_risk }}</strong>
+                    </p>
+                    <ul class="dashboard-report-stat-list">
+                        {% for item in risk_distribution %}
+                        <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <div class="dashboard-glass dashboard-card dashboard-report-card">
+                    <header class="dashboard-report-card-header">
+                        <h2 class="dashboard-panel-title">Fraud review</h2>
+                        <a class="dashboard-link" href="{{ export_urls.fraud }}">Export CSV</a>
+                    </header>
+                    <dl class="dashboard-meta">
+                        <div><dt>Flagged (portfolio)</dt><dd>{{ fraud_summary.fraud_flagged_total }}</dd></div>
+                        <div><dt>Flagged in pipeline</dt><dd>{{ fraud_summary.fraud_in_pipeline }}</dd></div>
+                        <div><dt>Flagged created in period</dt><dd>{{ period_kpis.fraud_flagged }}</dd></div>
+                    </dl>
+                </div>
+
+                <div class="dashboard-glass dashboard-card dashboard-report-card">
+                    <header class="dashboard-report-card-header">
+                        <h2 class="dashboard-panel-title">Officer workload</h2>
+                        <a class="dashboard-link" href="{{ export_urls.officers }}">Export CSV</a>
+                    </header>
+                    <ul class="dashboard-report-stat-list">
+                        {% for item in officer_workload %}
+                        <li>
+                            <span>{{ item.officer }}</span>
+                            <strong>{{ item.pipeline_count }} pipeline / {{ item.total_count }} total</strong>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <div class="dashboard-glass dashboard-card dashboard-report-card dashboard-report-card-span">
+                    <header class="dashboard-report-card-header">
+                        <h2 class="dashboard-panel-title">Governance &amp; audit trail</h2>
+                        <a class="dashboard-link" href="{{ export_urls.audit }}">Export audit CSV</a>
+                    </header>
+                    <dl class="dashboard-meta dashboard-meta-columns">
+                        <div><dt>Workflow batches</dt><dd>{{ governance.workflow_batches }}</dd></div>
+                        <div><dt>Audit events</dt><dd>{{ governance.total_events }}</dd></div>
+                        <div><dt>Critical events</dt><dd>{{ governance.critical_events }}</dd></div>
+                        <div><dt>Unique operators</dt><dd>{{ governance.unique_operators }}</dd></div>
+                        <div><dt>Applications touched</dt><dd>{{ governance.applications_touched }}</dd></div>
+                        <div><dt>Workflow updates (batches)</dt><dd>{{ activity_summary.updates_in_period }}</dd></div>
+                    </dl>
+                    <p class="dashboard-report-footnote">
+                        Audit exports include field-level changes, operators, governance notices, and critical-action flags.
+                        Filtered application exports are available from the
+                        <a class="dashboard-link" href="{{ url_for('admin') }}">Applications</a> dashboard.
                     </p>
                 </div>
             </section>
+
+            {% if portfolio_empty %}
+            <p class="dashboard-empty-copy">No applications in the portfolio yet. Reports will populate after intake.</p>
+            {% endif %}
         </main>
     </div>
 </div>

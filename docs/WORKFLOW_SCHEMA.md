@@ -115,3 +115,19 @@ Registered officer names for consistent assignment (`name` unique case-insensiti
 ### Analytics
 
 `updates_in_period` on `/admin/analytics` counts **distinct `batch_id`** in `workflow_history` for the selected range (true workflow activity, not `updated_at` proxy).
+
+## Operational reports & exports (Phase B3)
+
+### Reports page
+
+`GET /admin/reports?range=` — operational summaries (pipeline, outcomes, risk, fraud, officer workload, backlog, governance) with the same time ranges as analytics.
+
+### CSV export routes
+
+| Route | Purpose |
+|-------|---------|
+| `GET /admin/export/applications` | Applications CSV; accepts the same filter query params as `GET /admin` |
+| `GET /admin/export/audit?range=` | Workflow audit history; optional `application_id` |
+| `GET /admin/export/report/<type>?range=` | Typed reports: `operational`, `pipeline`, `outcomes`, `risk`, `fraud`, `officers`, `backlog` |
+
+Exports are capped at **10,000** rows per request. No PDF or async queue — synchronous CSV download via Flask `Response`.

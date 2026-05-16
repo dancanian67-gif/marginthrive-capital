@@ -1,9 +1,14 @@
 <section class="dashboard-glass dashboard-card dashboard-history-card">
-    <header class="dashboard-section-header dashboard-history-header">
-        <h2 class="dashboard-panel-title">Operational history</h2>
-        <p class="dashboard-subtitle dashboard-history-subtitle">
-            Chronological audit trail for workflow accountability
-        </p>
+    <header class="dashboard-section-header dashboard-history-header dashboard-history-header-row">
+        <div>
+            <h2 class="dashboard-panel-title">Operational history</h2>
+            <p class="dashboard-subtitle dashboard-history-subtitle">
+                Chronological audit trail for workflow accountability
+            </p>
+        </div>
+        {% if export_audit_url %}
+        <a class="dashboard-btn-secondary dashboard-export-btn" href="{{ export_audit_url }}">↓ Export audit CSV</a>
+        {% endif %}
     </header>
 
     {% if timeline_batches %}
