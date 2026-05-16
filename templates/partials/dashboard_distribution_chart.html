@@ -1,0 +1,20 @@
+{% if items %}
+<ul class="dashboard-distribution-list">
+    {% for row in items %}
+    <li class="dashboard-distribution-item">
+        <div class="dashboard-distribution-meta">
+            <span class="dashboard-distribution-label">{{ row.label }}</span>
+            <span class="dashboard-distribution-count">{{ row.count }}</span>
+        </div>
+        <div class="dashboard-distribution-track" role="presentation">
+            <span
+                class="dashboard-distribution-fill{% if row.fill_class %} {{ row.fill_class }}{% elif fill_class_prefix %} {{ fill_class_prefix }}-{{ row.label|lower }}{% endif %}"
+                style="width: {{ row.share }}%;"
+            ></span>
+        </div>
+    </li>
+    {% endfor %}
+</ul>
+{% else %}
+<p class="dashboard-empty-copy">{{ empty_message|default('No data for this period.') }}</p>
+{% endif %}

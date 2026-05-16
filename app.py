@@ -1,6 +1,7 @@
 import base64
 import hmac
 import os
+from datetime import date, timedelta
 
 from dotenv import load_dotenv
 
@@ -70,6 +71,18 @@ ADMIN_PAGE_SIZE = 15
 ADMIN_SEARCH_MAX_LENGTH = 100
 OVERVIEW_LIST_LIMIT = 8
 OVERVIEW_OFFICER_LIMIT = 6
+ANALYTICS_OFFICER_LIMIT = 10
+ANALYTICS_MAX_TREND_POINTS = 90
+
+ANALYTICS_TIME_RANGES = {
+    "today": "Today",
+    "7d": "Last 7 days",
+    "30d": "Last 30 days",
+    "90d": "Last 90 days",
+    "all": "All time",
+}
+
+DEFAULT_ANALYTICS_RANGE = "30d"
 
 ADMIN_LIST_FILTER_KEYS = (
     "status",
@@ -663,6 +676,342 @@ def _fetch_distinct_officers(cursor) -> list[str]:
     return [row["assigned_officer"] for row in cursor.fetchall()]
 
 
+def _parse_analytics_range(args) -> str:
+    range_key = (args.get("range") or DEFAULT_ANALYTICS_RANGE).strip()
+    if range_key not in ANALYTICS_TIME_RANGES:
+        return DEFAULT_ANALYTICS_RANGE
+    return range_key
+
+
+def _analytics_datetime_clause(range_key: str, column: str = "created_at") -> tuple[str, list]:
+    if range_key == "all":
+        return "", []
+    if range_key == "today":
+        return f" AND date({column}) = date('now')", []
+    day_map = {"7d": 7, "30d": 30, "90d": 90}
+    days = day_map[range_key]
+    return f" AND datetime({column}) >= datetime('now', '-{days} days')", []
+
+
+def _analytics_range_span_days(range_key: str) -> int | None:
+    if range_key == "today":
+        return 1
+    if range_key == "7d":
+        return 7
+    if range_key == "30d":
+        return 30
+    if range_key == "90d":
+        return 90
+    return None
+
+
+def _add_distribution_shares(items: list[dict], total: int | None = None) -> list[dict]:
+    denominator = total if total is not None else sum(item["count"] for item in items)
+    denominator = denominator or 1
+    for item in items:
+        item["share"] = round((item["count"] / denominator) * 100, 1)
+    return items
+
+
+def _fill_daily_trend(rows: list[dict], range_key: str) -> list[dict]:
+    span_days = _analytics_range_span_days(range_key)
+    if span_days is None:
+        return [{"label": row["label"], "count": row["count"]} for row in rows]
+
+    counts_by_day = {row["label"]: row["count"] for row in rows}
+    end_day = date.today()
+    start_day = end_day - timedelta(days=span_days - 1)
+    filled: list[dict] = []
+    current = start_day
+    while current <= end_day:
+        key = current.isoformat()
+        filled.append({"label": key, "count": counts_by_day.get(key, 0)})
+        current += timedelta(days=1)
+    return filled
+
+
+def _prepare_trend_chart(points: list[dict]) -> list[dict]:
+    if not points:
+        return []
+    max_count = max(point["count"] for point in points) or 1
+    prepared = []
+    for point in points:
+        label = point["label"]
+        if len(label) == 10 and label[4] == "-":
+            display_label = label[5:]
+        else:
+            display_label = label
+        prepared.append(
+            {
+                "label": label,
+                "display_label": display_label,
+                "count": point["count"],
+                "height_pct": round((point["count"] / max_count) * 100, 1),
+            }
+        )
+    return prepared
+
+
+def _fetch_analytics_period_kpis(cursor, range_key: str) -> dict:
+    created_clause, created_params = _analytics_datetime_clause(range_key, "created_at")
+    pipeline_placeholders = ", ".join("?" * len(KPI_ACTIVE_PIPELINE_STATUSES))
+    approved_placeholders = ", ".join("?" * len(KPI_APPROVED_STATUSES))
+    high_risk_placeholders = ", ".join("?" * len(KPI_HIGH_RISK_LEVELS))
+
+    cursor.execute(
+        f"""
+        SELECT
+            COUNT(*) AS total_applications,
+            SUM(CASE WHEN status IN ({pipeline_placeholders}) THEN 1 ELSE 0 END) AS active_pipeline,
+            SUM(CASE WHEN status IN ({approved_placeholders}) THEN 1 ELSE 0 END) AS approved,
+            SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS rejected,
+            SUM(CASE WHEN risk_level IN ({high_risk_placeholders}) THEN 1 ELSE 0 END) AS high_risk,
+            SUM(CASE WHEN flagged_fraud = 1 THEN 1 ELSE 0 END) AS fraud_flagged
+        FROM applications
+        WHERE created_at IS NOT NULL AND created_at != ''{created_clause}
+        """,
+        (
+            *KPI_ACTIVE_PIPELINE_STATUSES,
+            *KPI_APPROVED_STATUSES,
+            KPI_REJECTED_STATUS,
+            *KPI_HIGH_RISK_LEVELS,
+            *created_params,
+        ),
+    )
+    row = cursor.fetchone()
+    return {
+        "total_applications": row["total_applications"] or 0,
+        "active_pipeline": row["active_pipeline"] or 0,
+        "approved": row["approved"] or 0,
+        "rejected": row["rejected"] or 0,
+        "high_risk": row["high_risk"] or 0,
+        "fraud_flagged": row["fraud_flagged"] or 0,
+    }
+
+
+def _fetch_analytics_intake_trend(cursor, range_key: str) -> list[dict]:
+    created_clause, created_params = _analytics_datetime_clause(range_key, "created_at")
+    cursor.execute(
+        f"""
+        SELECT date(created_at) AS day_label, COUNT(*) AS count
+        FROM applications
+        WHERE created_at IS NOT NULL AND created_at != ''{created_clause}
+        GROUP BY date(created_at)
+        ORDER BY day_label ASC
+        LIMIT ?
+        """,
+        (*created_params, ANALYTICS_MAX_TREND_POINTS),
+    )
+    rows = [{"label": row["day_label"], "count": row["count"]} for row in cursor.fetchall()]
+    return _prepare_trend_chart(_fill_daily_trend(rows, range_key))
+
+
+def _fetch_analytics_outcome_trend(cursor, range_key: str) -> list[dict]:
+    created_clause, created_params = _analytics_datetime_clause(range_key, "created_at")
+    approved_placeholders = ", ".join("?" * len(KPI_APPROVED_STATUSES))
+    pipeline_placeholders = ", ".join("?" * len(KPI_ACTIVE_PIPELINE_STATUSES))
+    cursor.execute(
+        f"""
+        SELECT
+            date(created_at) AS day_label,
+            SUM(CASE WHEN status IN ({approved_placeholders}) THEN 1 ELSE 0 END) AS approved,
+            SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS rejected,
+            SUM(CASE WHEN status IN ({pipeline_placeholders}) THEN 1 ELSE 0 END) AS pipeline
+        FROM applications
+        WHERE created_at IS NOT NULL AND created_at != ''{created_clause}
+        GROUP BY date(created_at)
+        ORDER BY day_label ASC
+        LIMIT ?
+        """,
+        (
+            *KPI_APPROVED_STATUSES,
+            KPI_REJECTED_STATUS,
+            *KPI_ACTIVE_PIPELINE_STATUSES,
+            *created_params,
+            ANALYTICS_MAX_TREND_POINTS,
+        ),
+    )
+    return [
+        {
+            "label": row["day_label"],
+            "approved": row["approved"] or 0,
+            "rejected": row["rejected"] or 0,
+            "pipeline": row["pipeline"] or 0,
+        }
+        for row in cursor.fetchall()
+    ]
+
+
+def _fetch_analytics_fraud_trend(cursor, range_key: str) -> list[dict]:
+    created_clause, created_params = _analytics_datetime_clause(range_key, "created_at")
+    cursor.execute(
+        f"""
+        SELECT date(created_at) AS day_label, COUNT(*) AS count
+        FROM applications
+        WHERE flagged_fraud = 1
+          AND created_at IS NOT NULL AND created_at != ''{created_clause}
+        GROUP BY date(created_at)
+        ORDER BY day_label ASC
+        LIMIT ?
+        """,
+        (*created_params, ANALYTICS_MAX_TREND_POINTS),
+    )
+    rows = [{"label": row["day_label"], "count": row["count"]} for row in cursor.fetchall()]
+    return _prepare_trend_chart(_fill_daily_trend(rows, range_key))
+
+
+def _fetch_analytics_distribution(
+    cursor,
+    range_key: str,
+    *,
+    group_column: str,
+    order_values: tuple[str, ...] | None = None,
+) -> list[dict]:
+    created_clause, created_params = _analytics_datetime_clause(range_key, "created_at")
+    cursor.execute(
+        f"""
+        SELECT {group_column} AS label, COUNT(*) AS count
+        FROM applications
+        WHERE created_at IS NOT NULL AND created_at != ''{created_clause}
+        GROUP BY {group_column}
+        ORDER BY count DESC, label COLLATE NOCASE ASC
+        """,
+        created_params,
+    )
+    items = [{"label": row["label"] or "Unknown", "count": row["count"]} for row in cursor.fetchall()]
+    if order_values:
+        order_index = {value: index for index, value in enumerate(order_values)}
+        items.sort(key=lambda item: (order_index.get(item["label"], len(order_values)), -item["count"]))
+    return _add_distribution_shares(items)
+
+
+def _fetch_analytics_pipeline_distribution(cursor, range_key: str) -> list[dict]:
+    created_clause, created_params = _analytics_datetime_clause(range_key, "created_at")
+    pipeline_placeholders = ", ".join("?" * len(KPI_ACTIVE_PIPELINE_STATUSES))
+    cursor.execute(
+        f"""
+        SELECT status AS label, COUNT(*) AS count
+        FROM applications
+        WHERE status IN ({pipeline_placeholders})
+          AND created_at IS NOT NULL AND created_at != ''{created_clause}
+        GROUP BY status
+        ORDER BY count DESC
+        """,
+        (*KPI_ACTIVE_PIPELINE_STATUSES, *created_params),
+    )
+    return _add_distribution_shares([{"label": row["label"], "count": row["count"]} for row in cursor.fetchall()])
+
+
+def _fetch_analytics_officer_workload(cursor, range_key: str) -> list[dict]:
+    created_clause, created_params = _analytics_datetime_clause(range_key, "created_at")
+    pipeline_placeholders = ", ".join("?" * len(KPI_ACTIVE_PIPELINE_STATUSES))
+    cursor.execute(
+        f"""
+        SELECT
+            CASE
+                WHEN assigned_officer IS NULL OR TRIM(assigned_officer) = ''
+                THEN 'Unassigned'
+                ELSE assigned_officer
+            END AS officer_label,
+            COUNT(*) AS total_count,
+            SUM(CASE WHEN status IN ({pipeline_placeholders}) THEN 1 ELSE 0 END) AS pipeline_count,
+            SUM(CASE WHEN flagged_fraud = 1 THEN 1 ELSE 0 END) AS fraud_count
+        FROM applications
+        WHERE created_at IS NOT NULL AND created_at != ''{created_clause}
+        GROUP BY officer_label
+        ORDER BY pipeline_count DESC, total_count DESC, officer_label COLLATE NOCASE ASC
+        LIMIT ?
+        """,
+        (*KPI_ACTIVE_PIPELINE_STATUSES, *created_params, ANALYTICS_OFFICER_LIMIT),
+    )
+    rows = [
+        {
+            "officer": row["officer_label"],
+            "total_count": row["total_count"],
+            "pipeline_count": row["pipeline_count"],
+            "fraud_count": row["fraud_count"],
+        }
+        for row in cursor.fetchall()
+    ]
+    if not rows:
+        return rows
+    max_pipeline = max(row["pipeline_count"] for row in rows) or 1
+    for row in rows:
+        row["load_share"] = round((row["pipeline_count"] / max_pipeline) * 100, 1)
+    return rows
+
+
+def _fetch_analytics_backlog_snapshot(cursor) -> dict:
+    pipeline_backlog = _fetch_pipeline_backlog(cursor)
+    pipeline_total = sum(item["count"] for item in pipeline_backlog)
+    bottleneck = pipeline_backlog[0] if pipeline_backlog else None
+    return {
+        "pipeline_backlog": _add_distribution_shares(pipeline_backlog, pipeline_total),
+        "pipeline_total": pipeline_total,
+        "bottleneck_stage": bottleneck["label"] if bottleneck else None,
+        "bottleneck_count": bottleneck["count"] if bottleneck else 0,
+    }
+
+
+def _fetch_analytics_activity_summary(cursor, range_key: str) -> dict:
+    updated_clause, updated_params = _analytics_datetime_clause(range_key, "updated_at")
+    cursor.execute(
+        f"""
+        SELECT COUNT(*) AS updates_in_period
+        FROM applications
+        WHERE updated_at IS NOT NULL AND updated_at != ''{updated_clause}
+        """,
+        updated_params,
+    )
+    updates_in_period = cursor.fetchone()["updates_in_period"] or 0
+    return {"updates_in_period": updates_in_period}
+
+
+def _analytics_insights(
+    period_kpis: dict,
+    backlog: dict,
+    officer_workload: list[dict],
+    pipeline_distribution: list[dict],
+) -> list[str]:
+    insights: list[str] = []
+    if backlog["bottleneck_stage"] and backlog["bottleneck_count"]:
+        insights.append(
+            f"Largest pipeline bottleneck: {backlog['bottleneck_stage']} "
+            f"({backlog['bottleneck_count']} cases)."
+        )
+    if officer_workload:
+        top = officer_workload[0]
+        if top["officer"] != "Unassigned" and top["pipeline_count"] > 0:
+            insights.append(
+                f"Highest active pipeline load: {top['officer']} ({top['pipeline_count']} cases)."
+            )
+        unassigned = next((row for row in officer_workload if row["officer"] == "Unassigned"), None)
+        if unassigned and unassigned["pipeline_count"] > 0:
+            insights.append(
+                f"{unassigned['pipeline_count']} pipeline cases remain unassigned to an officer."
+            )
+    if period_kpis["fraud_flagged"]:
+        insights.append(
+            f"{period_kpis['fraud_flagged']} applications flagged for fraud in this period."
+        )
+    if period_kpis["high_risk"]:
+        insights.append(
+            f"{period_kpis['high_risk']} high-risk or critical applications created in this period."
+        )
+    if period_kpis["active_pipeline"] and period_kpis["rejected"]:
+        insights.append(
+            f"Rejection rate in period: "
+            f"{round((period_kpis['rejected'] / max(period_kpis['total_applications'], 1)) * 100, 1)}%."
+        )
+    if not pipeline_distribution and period_kpis["total_applications"] == 0:
+        insights.append("No applications were created in the selected time range.")
+    return insights[:5]
+
+
+def _analytics_range_query(range_key: str) -> dict:
+    return {"range": range_key}
+
+
 @app.template_global()
 def dashboard_risk_badge_class(risk_level: str) -> str:
     mapping = {
@@ -1046,6 +1395,65 @@ def admin_overview():
         active_nav="overview",
         page_title="Operations Overview",
         portfolio_empty=kpis["total_applications"] == 0,
+    )
+
+
+@app.route("/admin/analytics")
+@require_admin_auth
+def admin_analytics():
+    range_key = _parse_analytics_range(request.args)
+
+    conn = _get_db_connection()
+    cursor = conn.cursor()
+
+    period_kpis = _fetch_analytics_period_kpis(cursor, range_key)
+    intake_trend = _fetch_analytics_intake_trend(cursor, range_key)
+    fraud_trend = _fetch_analytics_fraud_trend(cursor, range_key)
+    outcome_trend = _fetch_analytics_outcome_trend(cursor, range_key)
+    status_distribution = _fetch_analytics_distribution(
+        cursor, range_key, group_column="status", order_values=APPLICATION_STATUSES
+    )
+    risk_distribution = _fetch_analytics_distribution(
+        cursor, range_key, group_column="risk_level", order_values=APPLICATION_RISK_LEVELS
+    )
+    pipeline_distribution = _fetch_analytics_pipeline_distribution(cursor, range_key)
+    officer_workload = _fetch_analytics_officer_workload(cursor, range_key)
+    backlog = _fetch_analytics_backlog_snapshot(cursor)
+    activity_summary = _fetch_analytics_activity_summary(cursor, range_key)
+
+    conn.close()
+
+    insights = _analytics_insights(period_kpis, backlog, officer_workload, pipeline_distribution)
+
+    return render_template(
+        "analytics.html",
+        range_key=range_key,
+        range_label=ANALYTICS_TIME_RANGES[range_key],
+        time_ranges=ANALYTICS_TIME_RANGES,
+        period_kpis=period_kpis,
+        intake_trend=intake_trend,
+        fraud_trend=fraud_trend,
+        outcome_trend=outcome_trend,
+        status_distribution=status_distribution,
+        risk_distribution=risk_distribution,
+        pipeline_distribution=pipeline_distribution,
+        officer_workload=officer_workload,
+        backlog=backlog,
+        activity_summary=activity_summary,
+        insights=insights,
+        active_nav="analytics",
+        page_title="Operational Analytics",
+        portfolio_empty=period_kpis["total_applications"] == 0,
+    )
+
+
+@app.route("/admin/reports")
+@require_admin_auth
+def admin_reports():
+    return render_template(
+        "reports.html",
+        active_nav="reports",
+        page_title="Reports",
     )
 
 

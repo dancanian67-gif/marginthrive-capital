@@ -1,0 +1,13 @@
+{% if points %}
+<div class="dashboard-trend-chart" role="img" aria-label="{{ chart_label|default('Trend chart') }}">
+    {% for point in points %}
+    <div class="dashboard-trend-bar-group" title="{{ point.label }}: {{ point.count }}">
+        <span class="dashboard-trend-bar" style="height: {{ point.height_pct }}%;"></span>
+        <span class="dashboard-trend-bar-label">{{ point.display_label }}</span>
+        <span class="dashboard-trend-bar-value">{{ point.count }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="dashboard-empty-copy">{{ empty_message|default('No trend data for this period.') }}</p>
+{% endif %}

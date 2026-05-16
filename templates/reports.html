@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% set page_title = page_title|default('Reports') %}
+    {% include 'partials/dashboard_head.html' %}
+</head>
+<body>
+
+<div class="dashboard-page">
+    <div class="dashboard-layout">
+        {% include 'partials/dashboard_nav.html' %}
+
+        <main class="dashboard-shell dashboard-content dashboard-main">
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <h1 class="dashboard-title">Reports</h1>
+                    <p class="dashboard-subtitle">Exportable reporting packs are planned for a later phase</p>
+                </header>
+
+                <div class="dashboard-glass dashboard-card">
+                    <div class="dashboard-insight-panel">
+                        <p>
+                            Use <a class="dashboard-link" href="{{ url_for('admin_analytics') }}">Operational Analytics</a>
+                            for time-based financing intelligence. Scheduled PDF/CSV exports and executive report
+                            bundles will be added here when reporting workflows are defined.
+                        </p>
+                    </div>
+                    <p class="dashboard-empty-copy">
+                        Reports remain a lightweight placeholder so navigation reflects the product roadmap without
+                        duplicating analytics dashboards.
+                    </p>
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+
+</body>
+</html>

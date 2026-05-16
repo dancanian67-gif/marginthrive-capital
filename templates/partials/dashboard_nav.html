@@ -13,7 +13,17 @@
         >
             Applications
         </a>
-        <span class="dashboard-nav-link is-disabled" title="Coming soon">Analytics</span>
-        <span class="dashboard-nav-link is-disabled" title="Coming soon">Reports</span>
+        <a
+            href="{{ url_for('admin_analytics') }}"
+            class="dashboard-nav-link{% if active_nav == 'analytics' %} is-active{% endif %}"
+        >
+            Analytics
+        </a>
+        <a
+            href="{{ url_for('admin_reports') }}"
+            class="dashboard-nav-link{% if active_nav == 'reports' %} is-active{% endif %}"
+        >
+            Reports
+        </a>
     </nav>
 </aside>

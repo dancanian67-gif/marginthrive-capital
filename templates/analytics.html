@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% set page_title = page_title|default('Operational Analytics') %}
+    {% include 'partials/dashboard_head.html' %}
+</head>
+<body>
+
+<div class="dashboard-page">
+    <div class="dashboard-layout">
+        {% include 'partials/dashboard_nav.html' %}
+
+        <main class="dashboard-shell dashboard-content dashboard-main">
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <h1 class="dashboard-title">Operational Analytics</h1>
+                    <p class="dashboard-subtitle">
+                        Financing intelligence for <strong>{{ range_label }}</strong>
+                        · current portfolio snapshot with period-based intake metrics
+                    </p>
+                </header>
+
+                {% include 'partials/dashboard_flash.html' %}
+
+                {% set time_range_endpoint = 'admin_analytics' %}
+                {% include 'partials/dashboard_time_range.html' %}
+
+                <div class="dashboard-kpi-grid dashboard-kpi-grid-executive">
+                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Applications in period</p>
+                        <p class="dashboard-kpi-value">{{ period_kpis.total_applications }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Pipeline (created)</p>
+                        <p class="dashboard-kpi-value">{{ period_kpis.active_pipeline }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Approved (created)</p>
+                        <p class="dashboard-kpi-value">{{ period_kpis.approved }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Rejected (created)</p>
+                        <p class="dashboard-kpi-value">{{ period_kpis.rejected }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">High risk (created)</p>
+                        <p class="dashboard-kpi-value">{{ period_kpis.high_risk }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Fraud flagged (created)</p>
+                        <p class="dashboard-kpi-value">{{ period_kpis.fraud_flagged }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Workflow updates</p>
+                        <p class="dashboard-kpi-value">{{ activity_summary.updates_in_period }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Live pipeline backlog</p>
+                        <p class="dashboard-kpi-value">{{ backlog.pipeline_total }}</p>
+                    </div>
+                </div>
+
+                {% if insights %}
+                <div class="dashboard-insight-panel dashboard-analytics-insights">
+                    <h2 class="dashboard-panel-title">Operational insights</h2>
+                    <ul class="dashboard-insight-list">
+                        {% for line in insights %}
+                        <li>{{ line }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </section>
+
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <h2 class="dashboard-title">Trends over time</h2>
+                </header>
+
+                <div class="dashboard-overview-grid">
+                    <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+                        <h3 class="dashboard-panel-title">Application intake</h3>
+                        <div class="dashboard-chart-frame">
+                            {% with points=intake_trend, chart_label='Applications created per day', empty_message='No applications created in this period.' %}
+                            {% include 'partials/dashboard_trend_chart.html' %}
+                            {% endwith %}
+                        </div>
+                        <p class="dashboard-analytics-caption">
+                            New applications by <code>created_at</code> in {{ range_label|lower }}.
+                        </p>
+                    </div>
+
+                    <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+                        <h3 class="dashboard-panel-title">Fraud flags in period</h3>
+                        <div class="dashboard-chart-frame">
+                            {% with points=fraud_trend, chart_label='Fraud flagged applications per day', empty_message='No fraud flags in this period.' %}
+                            {% include 'partials/dashboard_trend_chart.html' %}
+                            {% endwith %}
+                        </div>
+                        <p class="dashboard-analytics-caption">
+                            Applications created in period that are currently fraud-flagged.
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            {% if outcome_trend %}
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <h2 class="dashboard-title">Approval &amp; rejection activity</h2>
+                </header>
+                <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+                    <p class="dashboard-analytics-caption">
+                        Daily view of applications <strong>created</strong> in {{ range_label|lower }}, grouped by
+                        <em>current</em> status (approved, rejected, or still in pipeline).
+                    </p>
+                    <div class="dashboard-table-container">
+                        <table class="dashboard-table dashboard-table-compact">
+                            <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Pipeline</th>
+                                <th>Approved</th>
+                                <th>Rejected</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {% for row in outcome_trend[-14:] %}
+                            <tr>
+                                <td>{{ row.label }}</td>
+                                <td>{{ row.pipeline }}</td>
+                                <td>{{ row.approved }}</td>
+                                <td>{{ row.rejected }}</td>
+                            </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+            {% endif %}
+
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <h2 class="dashboard-title">Distribution &amp; concentration</h2>
+                </header>
+
+                <div class="dashboard-overview-grid dashboard-overview-grid-triple">
+                    <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+                        <h3 class="dashboard-panel-title">By workflow status</h3>
+                        <div class="dashboard-chart-frame dashboard-chart-frame-list">
+                            {% with items=status_distribution, fill_class_prefix='dashboard-distribution-fill-status', empty_message='No status data in this period.' %}
+                            {% include 'partials/dashboard_distribution_chart.html' %}
+                            {% endwith %}
+                        </div>
+                    </div>
+
+                    <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+                        <h3 class="dashboard-panel-title">By risk level</h3>
+                        <div class="dashboard-chart-frame dashboard-chart-frame-list">
+                            {% with items=risk_distribution, fill_class_prefix='dashboard-distribution-fill-risk', empty_message='No risk data in this period.' %}
+                            {% include 'partials/dashboard_distribution_chart.html' %}
+                            {% endwith %}
+                        </div>
+                        <p class="dashboard-overview-footnote">
+                            <a class="dashboard-link" href="{{ url_for('admin', preset='high_risk') }}">View high-risk queue →</a>
+                        </p>
+                    </div>
+
+                    <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+                        <h3 class="dashboard-panel-title">Active pipeline stages</h3>
+                        <div class="dashboard-chart-frame dashboard-chart-frame-list">
+                            {% with items=pipeline_distribution, empty_message='No active pipeline cases in this period.' %}
+                            {% include 'partials/dashboard_distribution_chart.html' %}
+                            {% endwith %}
+                        </div>
+                        <p class="dashboard-overview-footnote">
+                            <a class="dashboard-link" href="{{ url_for('admin', preset='pipeline') }}">View pipeline →</a>
+                        </p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <h2 class="dashboard-title">Backlog &amp; officer workload</h2>
+                </header>
+
+                <div class="dashboard-overview-grid">
+                    <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+                        <h3 class="dashboard-panel-title">Current pipeline backlog (live)</h3>
+                        <div class="dashboard-insight-panel dashboard-overview-insight">
+                            <p>
+                                <strong>{{ backlog.pipeline_total }}</strong> cases in active pipeline now.
+                                {% if backlog.bottleneck_stage %}
+                                Slowest stage: <strong>{{ backlog.bottleneck_stage }}</strong>
+                                ({{ backlog.bottleneck_count }}).
+                                {% endif %}
+                            </p>
+                        </div>
+                        <div class="dashboard-chart-frame dashboard-chart-frame-list">
+                            {% with items=backlog.pipeline_backlog, empty_message='No pipeline backlog.' %}
+                            {% include 'partials/dashboard_distribution_chart.html' %}
+                            {% endwith %}
+                        </div>
+                    </div>
+
+                    <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+                        <h3 class="dashboard-panel-title">Officer workload (period)</h3>
+                        {% if officer_workload %}
+                        <ul class="dashboard-distribution-list dashboard-officer-load-list">
+                            {% for row in officer_workload %}
+                            <li class="dashboard-distribution-item">
+                                <div class="dashboard-distribution-meta">
+                                    <span class="dashboard-distribution-label">
+                                        {% if row.officer == 'Unassigned' %}
+                                        {{ row.officer }}
+                                        {% else %}
+                                        <a class="dashboard-link" href="{{ url_for('admin', assigned_officer=row.officer) }}">{{ row.officer }}</a>
+                                        {% endif %}
+                                    </span>
+                                    <span class="dashboard-distribution-count">{{ row.pipeline_count }} pipeline</span>
+                                </div>
+                                <div class="dashboard-distribution-track" role="presentation">
+                                    <span class="dashboard-distribution-fill" style="width: {{ row.load_share }}%;"></span>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="dashboard-empty-copy">No officer assignments in this period.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,10 @@
+<div class="dashboard-time-range" role="navigation" aria-label="Time range">
+    {% for key, label in time_ranges.items() %}
+    <a
+        href="{{ url_for(time_range_endpoint, range=key) }}"
+        class="dashboard-time-range-link{% if range_key == key %} is-active{% endif %}"
+    >
+        {{ label }}
+    </a>
+    {% endfor %}
+</div>
