@@ -45,8 +45,31 @@ KPI_APPROVED_STATUSES = ("Pending payments", "Loan issued")
 KPI_REJECTED_STATUS = "Rejected"
 KPI_HIGH_RISK_LEVELS = ("High", "Critical")
 
+KPI_ACTIVE_PIPELINE_STATUSES = KPI_PENDING_STATUSES
+
+KPI_CLIENT_ACTION_SUB_STATUSES = (
+    "Client thinking",
+    "Client to submit documentation",
+    "Additional documentation",
+    "Branch visit arranged",
+    "Waiting for Other",
+)
+
+KPI_OPS_REVIEW_SUB_STATUS = "Margin to act"
+
+ADMIN_FILTER_PRESETS = {
+    "pipeline": "Active pipeline",
+    "approved": "Approved applications",
+    "rejected": "Rejected applications",
+    "high_risk": "High-risk applications",
+    "awaiting_client": "Awaiting client action",
+    "ops_review": "Pending operational review",
+}
+
 ADMIN_PAGE_SIZE = 15
 ADMIN_SEARCH_MAX_LENGTH = 100
+OVERVIEW_LIST_LIMIT = 8
+OVERVIEW_OFFICER_LIMIT = 6
 
 ADMIN_LIST_FILTER_KEYS = (
     "status",
@@ -55,6 +78,7 @@ ADMIN_LIST_FILTER_KEYS = (
     "flagged_fraud",
     "assigned_officer",
     "q",
+    "preset",
 )
 
 APPLICATION_SUB_STATUSES = (
@@ -308,6 +332,10 @@ def _parse_admin_list_filters(args) -> dict:
     if len(search_query) > ADMIN_SEARCH_MAX_LENGTH:
         search_query = search_query[:ADMIN_SEARCH_MAX_LENGTH]
 
+    preset = (args.get("preset") or "").strip()
+    if preset not in ADMIN_FILTER_PRESETS:
+        preset = ""
+
     try:
         page = max(1, int(args.get("page", 1)))
     except (TypeError, ValueError):
@@ -320,6 +348,7 @@ def _parse_admin_list_filters(args) -> dict:
         "flagged_fraud": flagged_fraud,
         "assigned_officer": assigned_officer,
         "q": search_query,
+        "preset": preset,
         "page": page,
     }
 
@@ -327,6 +356,35 @@ def _parse_admin_list_filters(args) -> dict:
 def _build_applications_where(filters: dict) -> tuple[str, list]:
     clauses: list[str] = []
     params: list = []
+
+    preset = filters.get("preset") or ""
+    if preset == "pipeline":
+        placeholders = ", ".join("?" * len(KPI_ACTIVE_PIPELINE_STATUSES))
+        clauses.append(f"status IN ({placeholders})")
+        params.extend(KPI_ACTIVE_PIPELINE_STATUSES)
+    elif preset == "approved":
+        placeholders = ", ".join("?" * len(KPI_APPROVED_STATUSES))
+        clauses.append(f"status IN ({placeholders})")
+        params.extend(KPI_APPROVED_STATUSES)
+    elif preset == "rejected":
+        clauses.append("status = ?")
+        params.append(KPI_REJECTED_STATUS)
+    elif preset == "high_risk":
+        placeholders = ", ".join("?" * len(KPI_HIGH_RISK_LEVELS))
+        clauses.append(f"risk_level IN ({placeholders})")
+        params.extend(KPI_HIGH_RISK_LEVELS)
+    elif preset == "awaiting_client":
+        placeholders = ", ".join("?" * len(KPI_CLIENT_ACTION_SUB_STATUSES))
+        clauses.append(f"sub_status IN ({placeholders})")
+        params.extend(KPI_CLIENT_ACTION_SUB_STATUSES)
+    elif preset == "ops_review":
+        pipeline_placeholders = ", ".join("?" * len(KPI_ACTIVE_PIPELINE_STATUSES))
+        clauses.append(
+            f"(sub_status = ? OR (status IN ({pipeline_placeholders}) AND "
+            "(assigned_officer IS NULL OR TRIM(assigned_officer) = '')))"
+        )
+        params.append(KPI_OPS_REVIEW_SUB_STATUS)
+        params.extend(KPI_ACTIVE_PIPELINE_STATUSES)
 
     if filters["status"]:
         clauses.append("status = ?")
@@ -364,37 +422,218 @@ def _filters_to_query_params(filters: dict) -> dict:
     return {key: filters[key] for key in ADMIN_LIST_FILTER_KEYS if filters.get(key)}
 
 
-def _fetch_application_kpis(cursor) -> dict:
-    pending_placeholders = ", ".join("?" * len(KPI_PENDING_STATUSES))
+def _fetch_executive_kpis(cursor) -> dict:
+    pipeline_placeholders = ", ".join("?" * len(KPI_ACTIVE_PIPELINE_STATUSES))
     approved_placeholders = ", ".join("?" * len(KPI_APPROVED_STATUSES))
     high_risk_placeholders = ", ".join("?" * len(KPI_HIGH_RISK_LEVELS))
+    client_placeholders = ", ".join("?" * len(KPI_CLIENT_ACTION_SUB_STATUSES))
 
     cursor.execute(
         f"""
         SELECT
             COUNT(*) AS total_applications,
-            SUM(CASE WHEN status IN ({pending_placeholders}) THEN 1 ELSE 0 END) AS pending_review,
+            SUM(CASE WHEN status IN ({pipeline_placeholders}) THEN 1 ELSE 0 END)
+                AS active_pipeline,
             SUM(CASE WHEN status IN ({approved_placeholders}) THEN 1 ELSE 0 END) AS approved,
             SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) AS rejected,
             SUM(CASE WHEN risk_level IN ({high_risk_placeholders}) THEN 1 ELSE 0 END) AS high_risk,
-            SUM(CASE WHEN flagged_fraud = 1 THEN 1 ELSE 0 END) AS fraud_flagged
+            SUM(CASE WHEN flagged_fraud = 1 THEN 1 ELSE 0 END) AS fraud_flagged,
+            SUM(
+                CASE
+                    WHEN sub_status = ?
+                        OR (
+                            status IN ({pipeline_placeholders})
+                            AND (assigned_officer IS NULL OR TRIM(assigned_officer) = '')
+                        )
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS pending_ops_review,
+            SUM(CASE WHEN sub_status IN ({client_placeholders}) THEN 1 ELSE 0 END)
+                AS awaiting_client_action
         FROM applications
         """,
         (
-            *KPI_PENDING_STATUSES,
+            *KPI_ACTIVE_PIPELINE_STATUSES,
             *KPI_APPROVED_STATUSES,
             KPI_REJECTED_STATUS,
             *KPI_HIGH_RISK_LEVELS,
+            KPI_OPS_REVIEW_SUB_STATUS,
+            *KPI_ACTIVE_PIPELINE_STATUSES,
+            *KPI_CLIENT_ACTION_SUB_STATUSES,
         ),
     )
     row = cursor.fetchone()
     return {
         "total_applications": row["total_applications"] or 0,
-        "pending_review": row["pending_review"] or 0,
+        "active_pipeline": row["active_pipeline"] or 0,
         "approved": row["approved"] or 0,
         "rejected": row["rejected"] or 0,
         "high_risk": row["high_risk"] or 0,
         "fraud_flagged": row["fraud_flagged"] or 0,
+        "pending_ops_review": row["pending_ops_review"] or 0,
+        "awaiting_client_action": row["awaiting_client_action"] or 0,
+    }
+
+
+def _fetch_application_kpis(cursor) -> dict:
+    executive = _fetch_executive_kpis(cursor)
+    return {
+        "total_applications": executive["total_applications"],
+        "pending_review": executive["active_pipeline"],
+        "approved": executive["approved"],
+        "rejected": executive["rejected"],
+        "high_risk": executive["high_risk"],
+        "fraud_flagged": executive["fraud_flagged"],
+    }
+
+
+def _fetch_status_distribution(cursor) -> list[dict]:
+    cursor.execute(
+        """
+        SELECT status, COUNT(*) AS count
+        FROM applications
+        GROUP BY status
+        ORDER BY count DESC, status COLLATE NOCASE ASC
+        """
+    )
+    return [{"label": row["status"], "count": row["count"]} for row in cursor.fetchall()]
+
+
+def _fetch_risk_distribution(cursor) -> list[dict]:
+    cursor.execute(
+        """
+        SELECT risk_level, COUNT(*) AS count
+        FROM applications
+        GROUP BY risk_level
+        ORDER BY count DESC, risk_level COLLATE NOCASE ASC
+        """
+    )
+    return [{"label": row["risk_level"], "count": row["count"]} for row in cursor.fetchall()]
+
+
+def _fetch_pipeline_backlog(cursor) -> list[dict]:
+    placeholders = ", ".join("?" * len(KPI_ACTIVE_PIPELINE_STATUSES))
+    cursor.execute(
+        f"""
+        SELECT status, COUNT(*) AS count
+        FROM applications
+        WHERE status IN ({placeholders})
+        GROUP BY status
+        ORDER BY count DESC
+        """,
+        KPI_ACTIVE_PIPELINE_STATUSES,
+    )
+    return [{"label": row["status"], "count": row["count"]} for row in cursor.fetchall()]
+
+
+def _fetch_officer_workload(cursor, limit: int = OVERVIEW_OFFICER_LIMIT) -> list[dict]:
+    pipeline_placeholders = ", ".join("?" * len(KPI_ACTIVE_PIPELINE_STATUSES))
+    cursor.execute(
+        f"""
+        SELECT
+            CASE
+                WHEN assigned_officer IS NULL OR TRIM(assigned_officer) = ''
+                THEN 'Unassigned'
+                ELSE assigned_officer
+            END AS officer_label,
+            COUNT(*) AS total_count,
+            SUM(CASE WHEN status IN ({pipeline_placeholders}) THEN 1 ELSE 0 END) AS pipeline_count,
+            SUM(CASE WHEN flagged_fraud = 1 THEN 1 ELSE 0 END) AS fraud_count
+        FROM applications
+        GROUP BY officer_label
+        ORDER BY pipeline_count DESC, total_count DESC, officer_label COLLATE NOCASE ASC
+        LIMIT ?
+        """,
+        (*KPI_ACTIVE_PIPELINE_STATUSES, limit),
+    )
+    return [
+        {
+            "officer": row["officer_label"],
+            "total_count": row["total_count"],
+            "pipeline_count": row["pipeline_count"],
+            "fraud_count": row["fraud_count"],
+        }
+        for row in cursor.fetchall()
+    ]
+
+
+def _fetch_recent_applications(cursor, limit: int = OVERVIEW_LIST_LIMIT) -> list:
+    cursor.execute(
+        """
+        SELECT
+            id,
+            business_name,
+            owner_name,
+            status,
+            risk_level,
+            created_at
+        FROM applications
+        ORDER BY datetime(created_at) DESC, id DESC
+        LIMIT ?
+        """,
+        (limit,),
+    )
+    return cursor.fetchall()
+
+
+def _fetch_attention_applications(cursor, limit: int = OVERVIEW_LIST_LIMIT) -> list:
+    high_risk_placeholders = ", ".join("?" * len(KPI_HIGH_RISK_LEVELS))
+    pipeline_placeholders = ", ".join("?" * len(KPI_ACTIVE_PIPELINE_STATUSES))
+    cursor.execute(
+        f"""
+        SELECT
+            id,
+            business_name,
+            owner_name,
+            status,
+            sub_status,
+            risk_level,
+            flagged_fraud,
+            assigned_officer,
+            updated_at
+        FROM applications
+        WHERE
+            flagged_fraud = 1
+            OR risk_level IN ({high_risk_placeholders})
+            OR sub_status = ?
+            OR (
+                status IN ({pipeline_placeholders})
+                AND (assigned_officer IS NULL OR TRIM(assigned_officer) = '')
+            )
+        ORDER BY
+            flagged_fraud DESC,
+            CASE risk_level
+                WHEN 'Critical' THEN 4
+                WHEN 'High' THEN 3
+                WHEN 'Medium' THEN 2
+                WHEN 'Low' THEN 1
+                ELSE 0
+            END DESC,
+            datetime(updated_at) ASC,
+            id ASC
+        LIMIT ?
+        """,
+        (
+            *KPI_HIGH_RISK_LEVELS,
+            KPI_OPS_REVIEW_SUB_STATUS,
+            *KPI_ACTIVE_PIPELINE_STATUSES,
+            limit,
+        ),
+    )
+    return cursor.fetchall()
+
+
+def _overview_drilldown_links() -> dict[str, str]:
+    return {
+        "total_applications": url_for("admin"),
+        "active_pipeline": url_for("admin", preset="pipeline"),
+        "approved": url_for("admin", preset="approved"),
+        "rejected": url_for("admin", preset="rejected"),
+        "high_risk": url_for("admin", preset="high_risk"),
+        "fraud_flagged": url_for("admin", flagged_fraud="1"),
+        "pending_ops_review": url_for("admin", preset="ops_review"),
+        "awaiting_client_action": url_for("admin", preset="awaiting_client"),
     }
 
 
@@ -529,6 +768,48 @@ def apply():
 
     return redirect('/')
 
+@app.route("/admin/overview")
+@require_admin_auth
+def admin_overview():
+    conn = _get_db_connection()
+    cursor = conn.cursor()
+
+    kpis = _fetch_executive_kpis(cursor)
+    status_distribution = _fetch_status_distribution(cursor)
+    risk_distribution = _fetch_risk_distribution(cursor)
+    pipeline_backlog = _fetch_pipeline_backlog(cursor)
+    officer_workload = _fetch_officer_workload(cursor)
+    recent_applications = _fetch_recent_applications(cursor)
+    attention_applications = _fetch_attention_applications(cursor)
+
+    conn.close()
+
+    total_for_bars = kpis["total_applications"] or 1
+    for item in status_distribution:
+        item["share"] = round((item["count"] / total_for_bars) * 100, 1)
+    for item in risk_distribution:
+        item["share"] = round((item["count"] / total_for_bars) * 100, 1)
+
+    pipeline_total = sum(item["count"] for item in pipeline_backlog)
+    pipeline_denominator = pipeline_total or 1
+    for item in pipeline_backlog:
+        item["share"] = round((item["count"] / pipeline_denominator) * 100, 1)
+
+    return render_template(
+        "overview.html",
+        kpis=kpis,
+        kpi_links=_overview_drilldown_links(),
+        status_distribution=status_distribution,
+        risk_distribution=risk_distribution,
+        pipeline_backlog=pipeline_backlog,
+        pipeline_total=pipeline_total,
+        officer_workload=officer_workload,
+        recent_applications=recent_applications,
+        attention_applications=attention_applications,
+        active_nav="overview",
+    )
+
+
 @app.route('/admin')
 @require_admin_auth
 def admin():
@@ -581,13 +862,20 @@ def admin():
         "page_size": ADMIN_PAGE_SIZE,
     }
 
+    preset = filters.get("preset") or ""
+    filter_preset_label = ADMIN_FILTER_PRESETS.get(preset, "")
+    if not filter_preset_label and filters.get("flagged_fraud") == "1":
+        filter_preset_label = "Fraud-flagged applications"
+
     return render_template(
         "dashboard.html",
         applications=applications,
         filters=filters,
         kpis=kpis,
+        kpi_links=_overview_drilldown_links(),
         pagination=pagination,
         filter_query=_filters_to_query_params(filters),
+        filter_preset_label=filter_preset_label,
         statuses=APPLICATION_STATUSES,
         sub_statuses=APPLICATION_SUB_STATUSES,
         risk_levels=APPLICATION_RISK_LEVELS,

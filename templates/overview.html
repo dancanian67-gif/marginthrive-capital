@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operations Overview — MarginThrive Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+
+<div class="dashboard-page">
+    <div class="dashboard-layout">
+        {% include 'partials/dashboard_nav.html' %}
+
+        <main class="dashboard-shell dashboard-content dashboard-main">
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <h1 class="dashboard-title">Operations Overview</h1>
+                    <p class="dashboard-subtitle">Executive visibility across the financing portfolio</p>
+                </header>
+
+                <div class="dashboard-kpi-grid dashboard-kpi-grid-executive">
+                    {% set executive_kpis = [
+                        ('Total applications', kpis.total_applications, kpi_links.total_applications),
+                        ('Active pipeline', kpis.active_pipeline, kpi_links.active_pipeline),
+                        ('Approved', kpis.approved, kpi_links.approved),
+                        ('Rejected', kpis.rejected, kpi_links.rejected),
+                        ('High risk', kpis.high_risk, kpi_links.high_risk),
+                        ('Fraud flagged', kpis.fraud_flagged, kpi_links.fraud_flagged),
+                        ('Pending ops review', kpis.pending_ops_review, kpi_links.pending_ops_review),
+                        ('Awaiting client action', kpis.awaiting_client_action, kpi_links.awaiting_client_action),
+                    ] %}
+                    {% for label, value, href in executive_kpis %}
+                    {% include 'partials/dashboard_kpi_link.html' %}
+                    {% endfor %}
+                </div>
+            </section>
+
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <h2 class="dashboard-title">Operational queues</h2>
+                </header>
+
+                <div class="dashboard-overview-grid">
+                    <div class="dashboard-glass dashboard-card">
+                        <h3 class="dashboard-panel-title">Recent applications</h3>
+                        {% if recent_applications %}
+                        <div class="dashboard-table-container">
+                            <table class="dashboard-table dashboard-table-compact">
+                                <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Business</th>
+                                    <th>Status</th>
+                                    <th></th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {% for app in recent_applications %}
+                                <tr>
+                                    <td>{{ app['id'] }}</td>
+                                    <td>{{ app['business_name'] }}</td>
+                                    <td>
+                                        <span class="dashboard-badge {{ dashboard_status_badge_class(app['status']) }}">
+                                            {{ app['status'] }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <a class="dashboard-link" href="{{ url_for('admin_application_detail', application_id=app['id']) }}">Review</a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="dashboard-empty-copy">No applications yet.</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="dashboard-glass dashboard-card">
+                        <h3 class="dashboard-panel-title">Applications needing attention</h3>
+                        {% if attention_applications %}
+                        <div class="dashboard-table-container">
+                            <table class="dashboard-table dashboard-table-compact">
+                                <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Business</th>
+                                    <th>Signal</th>
+                                    <th></th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                {% for app in attention_applications %}
+                                <tr>
+                                    <td>{{ app['id'] }}</td>
+                                    <td>{{ app['business_name'] }}</td>
+                                    <td>
+                                        {% if app['flagged_fraud'] %}
+                                        <span class="dashboard-badge dashboard-badge-fraud">Fraud</span>
+                                        {% elif app['risk_level'] in ['High', 'Critical'] %}
+                                        <span class="dashboard-badge {{ dashboard_risk_badge_class(app['risk_level']) }}">{{ app['risk_level'] }}</span>
+                                        {% elif app['sub_status'] == 'Margin to act' %}
+                                        <span class="dashboard-badge dashboard-badge-status-pending">Margin to act</span>
+                                        {% else %}
+                                        <span class="dashboard-badge dashboard-badge-status-pending">Unassigned</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a class="dashboard-link" href="{{ url_for('admin_application_detail', application_id=app['id']) }}">Review</a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        <p class="dashboard-overview-footnote">
+                            <a class="dashboard-link" href="{{ url_for('admin', preset='ops_review') }}">View full ops review queue →</a>
+                        </p>
+                        {% else %}
+                        <p class="dashboard-empty-copy">No applications currently flagged for attention.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <h2 class="dashboard-title">Pipeline &amp; risk posture</h2>
+                </header>
+
+                <div class="dashboard-overview-grid dashboard-overview-grid-triple">
+                    <div class="dashboard-glass dashboard-card">
+                        <h3 class="dashboard-panel-title">Workflow stage distribution</h3>
+                        {% if status_distribution %}
+                        <ul class="dashboard-distribution-list">
+                            {% for row in status_distribution %}
+                            <li class="dashboard-distribution-item">
+                                <div class="dashboard-distribution-meta">
+                                    <span class="dashboard-distribution-label">{{ row.label }}</span>
+                                    <span class="dashboard-distribution-count">{{ row.count }}</span>
+                                </div>
+                                <div class="dashboard-distribution-track" role="presentation">
+                                    <span class="dashboard-distribution-fill" style="width: {{ row.share }}%;"></span>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="dashboard-empty-copy">No workflow data available.</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="dashboard-glass dashboard-card">
+                        <h3 class="dashboard-panel-title">Risk concentration</h3>
+                        {% if risk_distribution %}
+                        <ul class="dashboard-distribution-list">
+                            {% for row in risk_distribution %}
+                            <li class="dashboard-distribution-item">
+                                <div class="dashboard-distribution-meta">
+                                    <span class="dashboard-distribution-label">{{ row.label }}</span>
+                                    <span class="dashboard-distribution-count">{{ row.count }}</span>
+                                </div>
+                                <div class="dashboard-distribution-track" role="presentation">
+                                    <span class="dashboard-distribution-fill dashboard-distribution-fill-risk-{{ row.label|lower }}" style="width: {{ row.share }}%;"></span>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        <p class="dashboard-overview-footnote">
+                            <a class="dashboard-link" href="{{ url_for('admin', preset='high_risk') }}">View high-risk applications →</a>
+                        </p>
+                        {% else %}
+                        <p class="dashboard-empty-copy">No risk data available.</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="dashboard-glass dashboard-card">
+                        <h3 class="dashboard-panel-title">Pending review backlog</h3>
+                        <div class="dashboard-insight-panel dashboard-overview-insight">
+                            <p>
+                                <strong>{{ pipeline_total }}</strong>
+                                application{% if pipeline_total != 1 %}s{% endif %}
+                                in the active pipeline
+                                {% if kpis.pending_ops_review %}
+                                · <strong>{{ kpis.pending_ops_review }}</strong> need operational review
+                                {% endif %}
+                            </p>
+                        </div>
+                        {% if pipeline_backlog %}
+                        <ul class="dashboard-distribution-list">
+                            {% for row in pipeline_backlog %}
+                            <li class="dashboard-distribution-item">
+                                <div class="dashboard-distribution-meta">
+                                    <span class="dashboard-distribution-label">{{ row.label }}</span>
+                                    <span class="dashboard-distribution-count">{{ row.count }}</span>
+                                </div>
+                                <div class="dashboard-distribution-track" role="presentation">
+                                    <span class="dashboard-distribution-fill" style="width: {{ row.share }}%;"></span>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        <p class="dashboard-overview-footnote">
+                            <a class="dashboard-link" href="{{ url_for('admin', preset='pipeline') }}">View active pipeline →</a>
+                        </p>
+                        {% else %}
+                        <p class="dashboard-empty-copy">No applications in the active pipeline.</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </section>
+
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <h2 class="dashboard-title">Officer workload</h2>
+                </header>
+
+                <div class="dashboard-glass dashboard-card dashboard-table-container">
+                    {% if officer_workload %}
+                    <table class="dashboard-table dashboard-table-compact">
+                        <thead>
+                        <tr>
+                            <th>Officer</th>
+                            <th>Total cases</th>
+                            <th>Active pipeline</th>
+                            <th>Fraud flagged</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for row in officer_workload %}
+                        <tr>
+                            <td>
+                                {% if row.officer == 'Unassigned' %}
+                                {{ row.officer }}
+                                {% else %}
+                                <a class="dashboard-link" href="{{ url_for('admin', assigned_officer=row.officer) }}">{{ row.officer }}</a>
+                                {% endif %}
+                            </td>
+                            <td>{{ row.total_count }}</td>
+                            <td>{{ row.pipeline_count }}</td>
+                            <td>{{ row.fraud_count }}</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="dashboard-empty-copy">No officer assignments recorded yet.</p>
+                    {% endif %}
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+
+</body>
+</html>

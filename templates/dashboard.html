@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard</title>
+    <title>Applications — MarginThrive Admin</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
 </head>
 <body>
@@ -20,31 +20,27 @@
                 </header>
 
                 <div class="dashboard-kpi-grid">
-                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
-                        <p class="dashboard-kpi-label">Total applications</p>
-                        <p class="dashboard-kpi-value">{{ kpis.total_applications }}</p>
-                    </div>
-                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
-                        <p class="dashboard-kpi-label">Pending review</p>
-                        <p class="dashboard-kpi-value">{{ kpis.pending_review }}</p>
-                    </div>
-                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
-                        <p class="dashboard-kpi-label">Approved</p>
-                        <p class="dashboard-kpi-value">{{ kpis.approved }}</p>
-                    </div>
-                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
-                        <p class="dashboard-kpi-label">Rejected</p>
-                        <p class="dashboard-kpi-value">{{ kpis.rejected }}</p>
-                    </div>
-                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
-                        <p class="dashboard-kpi-label">High risk</p>
-                        <p class="dashboard-kpi-value">{{ kpis.high_risk }}</p>
-                    </div>
-                    <div class="dashboard-glass dashboard-card dashboard-kpi-card">
-                        <p class="dashboard-kpi-label">Fraud flagged</p>
-                        <p class="dashboard-kpi-value">{{ kpis.fraud_flagged }}</p>
-                    </div>
+                    {% set application_kpis = [
+                        ('Total applications', kpis.total_applications, kpi_links.total_applications),
+                        ('Pending review', kpis.pending_review, kpi_links.active_pipeline),
+                        ('Approved', kpis.approved, kpi_links.approved),
+                        ('Rejected', kpis.rejected, kpi_links.rejected),
+                        ('High risk', kpis.high_risk, kpi_links.high_risk),
+                        ('Fraud flagged', kpis.fraud_flagged, kpi_links.fraud_flagged),
+                    ] %}
+                    {% for label, value, href in application_kpis %}
+                    {% include 'partials/dashboard_kpi_link.html' %}
+                    {% endfor %}
                 </div>
+
+                {% if filter_preset_label %}
+                <div class="dashboard-insight-panel dashboard-filter-preset-banner">
+                    <p>
+                        Showing <strong>{{ filter_preset_label }}</strong> from overview drill-down.
+                        <a class="dashboard-link" href="{{ url_for('admin') }}">Clear preset</a>
+                    </p>
+                </div>
+                {% endif %}
 
                 <div class="dashboard-glass dashboard-card dashboard-filters-card">
                     <h2 class="dashboard-panel-title">Filter &amp; search</h2>

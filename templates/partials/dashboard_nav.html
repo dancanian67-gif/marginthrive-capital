@@ -2,6 +2,12 @@
     <p class="dashboard-nav-brand">Margin<span>Thrive</span> Ops</p>
     <nav class="dashboard-nav-links">
         <a
+            href="{{ url_for('admin_overview') }}"
+            class="dashboard-nav-link{% if active_nav == 'overview' %} is-active{% endif %}"
+        >
+            Overview
+        </a>
+        <a
             href="{{ url_for('admin') }}"
             class="dashboard-nav-link{% if active_nav == 'applications' %} is-active{% endif %}"
         >
