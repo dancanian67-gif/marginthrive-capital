@@ -1,0 +1,50 @@
+<section class="dashboard-glass dashboard-card dashboard-history-card">
+    <header class="dashboard-section-header dashboard-history-header">
+        <h2 class="dashboard-panel-title">Operational history</h2>
+        <p class="dashboard-subtitle dashboard-history-subtitle">
+            Chronological audit trail for workflow accountability
+        </p>
+    </header>
+
+    {% if timeline_batches %}
+    <ol class="dashboard-history-timeline" aria-label="Workflow audit history">
+        {% for batch in timeline_batches %}
+        <li class="dashboard-history-batch {{ dashboard_history_batch_class(batch) }}">
+            <span class="dashboard-history-marker" aria-hidden="true"></span>
+            <div class="dashboard-history-batch-body">
+                <div class="dashboard-history-batch-meta">
+                    <time class="dashboard-history-time" datetime="{{ batch.created_at }}">
+                        {{ batch.created_at }}
+                    </time>
+                    <span class="dashboard-history-actor">{{ batch.actor }}</span>
+                    <span class="dashboard-history-action">
+                        {{ dashboard_history_action_label(batch.action_type) }}
+                    </span>
+                </div>
+                <ul class="dashboard-history-events">
+                    {% for event in batch.events %}
+                    <li class="dashboard-history-event{% if event.is_critical %} dashboard-history-event-critical{% endif %}">
+                        {{ event.summary }}
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% if batch.context_notes %}
+                <p class="dashboard-history-note">
+                    <strong>Operational note:</strong> {{ batch.context_notes }}
+                </p>
+                {% endif %}
+                {% if batch.transition_warning %}
+                <p class="dashboard-history-warning" role="status">
+                    <strong>Governance notice:</strong> {{ batch.transition_warning }}
+                </p>
+                {% endif %}
+            </div>
+        </li>
+        {% endfor %}
+    </ol>
+    {% else %}
+    <p class="dashboard-empty-copy">
+        No workflow history recorded yet. Updates will appear here after the first operational change.
+    </p>
+    {% endif %}
+</section>

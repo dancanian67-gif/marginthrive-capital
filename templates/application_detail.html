@@ -35,6 +35,13 @@
 
                 {% include 'partials/dashboard_flash.html' %}
 
+                <div class="dashboard-insight-panel dashboard-operator-banner" role="status">
+                    <p>
+                        <strong>Operator:</strong> {{ admin_actor }}
+                        <span class="dashboard-operator-hint">All workflow saves are attributed to this admin account.</span>
+                    </p>
+                </div>
+
                 {% if needs_attention %}
                 <div class="dashboard-insight-panel dashboard-attention-banner" role="status">
                     <p>
@@ -90,6 +97,20 @@
                     </div>
                 </div>
 
+                {% include 'partials/dashboard_workflow_timeline.html' %}
+
+                <div class="dashboard-glass dashboard-card dashboard-governance-card">
+                    <h2 class="dashboard-panel-title">Governance &amp; escalation</h2>
+                    <ul class="dashboard-governance-list">
+                        <li>Status changes to <strong>Management approval</strong>, <strong>Rejected</strong>, or <strong>Loan issued</strong> require an operational note.</li>
+                        <li>Fraud flag, critical risk, and certain quick actions require documented context.</li>
+                        <li>Skipped pipeline stages are allowed but recorded with a governance notice in the audit trail.</li>
+                        {% if status_transition_hint and next_pipeline_status %}
+                        <li class="dashboard-governance-warning">Advancing may trigger: {{ status_transition_hint }}</li>
+                        {% endif %}
+                    </ul>
+                </div>
+
                 <div class="dashboard-glass dashboard-card dashboard-workflow-form-card">
                     <h2 class="dashboard-panel-title">Quick actions</h2>
                     <div class="dashboard-quick-actions">
@@ -110,15 +131,23 @@
                             <input type="hidden" name="workflow_action" value="clear_sub_status">
                             <button type="submit" class="dashboard-btn-secondary">Clear sub-status</button>
                         </form>
-                        <form method="POST" action="{{ url_for('admin_application_workflow', application_id=application['id']) }}" class="dashboard-quick-action-form">
+                        <form method="POST" action="{{ url_for('admin_application_workflow', application_id=application['id']) }}" class="dashboard-quick-action-form dashboard-quick-action-sensitive">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <input type="hidden" name="workflow_action" value="mark_high_risk">
+                            <label class="dashboard-quick-action-note">
+                                <span>Operational note (required)</span>
+                                <input type="text" name="audit_context" maxlength="1000" placeholder="Reason for elevating risk" required>
+                            </label>
                             <button type="submit" class="dashboard-btn-secondary">Set high risk</button>
                         </form>
                         {% if application['flagged_fraud'] %}
-                        <form method="POST" action="{{ url_for('admin_application_workflow', application_id=application['id']) }}" class="dashboard-quick-action-form">
+                        <form method="POST" action="{{ url_for('admin_application_workflow', application_id=application['id']) }}" class="dashboard-quick-action-form dashboard-quick-action-sensitive">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <input type="hidden" name="workflow_action" value="clear_fraud_flag">
+                            <label class="dashboard-quick-action-note">
+                                <span>Operational note (required)</span>
+                                <input type="text" name="audit_context" maxlength="1000" placeholder="Reason for clearing fraud flag" required>
+                            </label>
                             <button type="submit" class="dashboard-btn-secondary">Clear fraud flag</button>
                         </form>
                         {% endif %}
@@ -179,12 +208,30 @@
                                     type="text"
                                     id="assigned_officer"
                                     name="assigned_officer"
+                                    list="registered-officers"
                                     value="{{ application['assigned_officer'] }}"
                                     maxlength="150"
-                                    placeholder="Officer name"
+                                    placeholder="Select or enter officer name"
                                     autocomplete="off"
                                 >
-                                <p class="dashboard-field-hint">Letters, numbers, spaces, and . ' - only.</p>
+                                <datalist id="registered-officers">
+                                    {% for officer in officers %}
+                                    <option value="{{ officer }}"></option>
+                                    {% endfor %}
+                                </datalist>
+                                <p class="dashboard-field-hint">Choose a registered officer for consistent attribution.</p>
+                            </div>
+
+                            <div class="dashboard-form-row">
+                                <label for="audit_context">Operational note</label>
+                                <textarea
+                                    id="audit_context"
+                                    name="audit_context"
+                                    rows="3"
+                                    maxlength="1000"
+                                    placeholder="Required for sensitive status changes, fraud updates, critical risk, or skipped stages"
+                                ></textarea>
+                                <p class="dashboard-field-hint">Document why this change is being made when governance rules apply.</p>
                             </div>
 
                             <div class="dashboard-form-row">

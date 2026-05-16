@@ -80,3 +80,38 @@ Risk levels: `Unassigned`, `Low`, `Medium`, `High`, `Critical`.
 KPI cards show **portfolio-wide** counts (not filtered). The table respects active filters. Pagination links preserve filter/search query params.
 
 Lifecycle status **Rejected** is available for filtering and workflow updates.
+
+## Operational audit trail (Phase B2)
+
+### `workflow_history` table
+
+Append-only audit log for workflow accountability. Created on startup via `init_db()`.
+
+| Column | Type | Notes |
+|--------|------|--------|
+| `id` | INTEGER | Primary key |
+| `application_id` | INTEGER | Related application |
+| `batch_id` | TEXT | Groups field changes from one save/quick action |
+| `action_type` | TEXT | e.g. `status_change`, `workflow_update`, `quick_action_advance` |
+| `field_name` | TEXT | Changed field (nullable for bundled events) |
+| `old_value` / `new_value` | TEXT | Human-readable before/after |
+| `previous_state` / `new_state` | TEXT | JSON snapshot of workflow fields |
+| `actor` | TEXT | Admin username (Basic Auth) or `Public intake` |
+| `context_notes` | TEXT | Optional operational note for sensitive actions |
+| `is_critical` | INTEGER | Highlights fraud/risk/escalation in UI |
+| `transition_warning` | TEXT | Governance notice for risky transitions |
+| `created_at` | TEXT | UTC timestamp |
+
+Indexes: `(application_id, created_at DESC)`, `(batch_id)`.
+
+### `officers` table
+
+Registered officer names for consistent assignment (`name` unique case-insensitive). Seeded from existing `assigned_officer` values on startup.
+
+### Workflow save behavior
+
+`POST /admin/applications/<id>/workflow` updates `applications`, writes `workflow_history` rows per changed field, and attributes the save to the authenticated admin operator. Sensitive changes may require `audit_context` (operational note).
+
+### Analytics
+
+`updates_in_period` on `/admin/analytics` counts **distinct `batch_id`** in `workflow_history` for the selected range (true workflow activity, not `updated_at` proxy).

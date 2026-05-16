@@ -1,5 +1,6 @@
 import base64
 import hmac
+import json
 import os
 from datetime import date, timedelta
 
@@ -11,7 +12,7 @@ import secrets
 import sqlite3
 from functools import wraps
 
-from flask import Flask, Response, flash, redirect, render_template, request, session, url_for
+from flask import Flask, Response, flash, g, redirect, render_template, request, session, url_for
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = os.getenv("SECRET_KEY", "dev-only-secret-key-change-me")
@@ -131,6 +132,40 @@ WORKFLOW_SUB_STATUS_GROUPS = (
 
 OFFICER_NAME_PATTERN = re.compile(r"^[\w\s.'\-]{0,150}$", re.UNICODE)
 
+WORKFLOW_HISTORY_LIMIT = 100
+MAX_AUDIT_CONTEXT_LENGTH = 1000
+PUBLIC_INTAKE_ACTOR = "Public intake"
+
+WORKFLOW_AUDIT_FIELDS = (
+    "status",
+    "sub_status",
+    "risk_level",
+    "assigned_officer",
+    "flagged_fraud",
+    "approval_notes",
+)
+
+WORKFLOW_FIELD_ACTION_TYPES = {
+    "status": "status_change",
+    "sub_status": "sub_status_change",
+    "risk_level": "risk_level_change",
+    "flagged_fraud": "fraud_flag_change",
+    "assigned_officer": "officer_assignment",
+    "approval_notes": "notes_update",
+}
+
+QUICK_ACTION_AUDIT_TYPES = {
+    "advance_status": "quick_action_advance",
+    "margin_to_act": "quick_action_margin_to_act",
+    "clear_sub_status": "quick_action_clear_sub_status",
+    "mark_high_risk": "quick_action_high_risk",
+    "clear_fraud_flag": "quick_action_clear_fraud",
+}
+
+QUICK_ACTIONS_REQUIRING_AUDIT_NOTE = frozenset({"mark_high_risk", "clear_fraud_flag"})
+
+SENSITIVE_AUDIT_STATUSES = frozenset({"Management approval", "Rejected", "Loan issued"})
+
 # ALTER TABLE only allows constant defaults; timestamps are backfilled after add.
 APPLICATIONS_SCHEMA_COLUMNS = (
     ("status", "TEXT NOT NULL DEFAULT 'New applicant'"),
@@ -203,8 +238,22 @@ def _is_valid_application_form(data) -> bool:
     return True
 
 
-def _check_admin_auth(auth_header: str | None) -> bool:
+def _parse_basic_auth_credentials(auth_header: str | None) -> tuple[str, str] | None:
     if not auth_header or not auth_header.startswith("Basic "):
+        return None
+
+    try:
+        encoded_credentials = auth_header.split(" ", 1)[1]
+        decoded = base64.b64decode(encoded_credentials).decode("utf-8")
+        username, password = decoded.split(":", 1)
+        return username, password
+    except Exception:
+        return None
+
+
+def _check_admin_auth(auth_header: str | None) -> bool:
+    credentials = _parse_basic_auth_credentials(auth_header)
+    if not credentials:
         return False
 
     expected_username = os.getenv("ADMIN_USERNAME")
@@ -212,14 +261,19 @@ def _check_admin_auth(auth_header: str | None) -> bool:
     if not expected_username or not expected_password:
         return False
 
-    try:
-        encoded_credentials = auth_header.split(" ", 1)[1]
-        decoded = base64.b64decode(encoded_credentials).decode("utf-8")
-        username, password = decoded.split(":", 1)
-    except Exception:
-        return False
-
+    username, password = credentials
     return hmac.compare_digest(username, expected_username) and hmac.compare_digest(password, expected_password)
+
+
+def _get_request_actor() -> str:
+    configured = os.getenv("ADMIN_USERNAME")
+    credentials = _parse_basic_auth_credentials(request.headers.get("Authorization"))
+    if credentials:
+        username, _password = credentials
+        if configured and hmac.compare_digest(username, configured):
+            return username
+        return username
+    return configured or "admin"
 
 
 def require_admin_auth(route_fn):
@@ -235,6 +289,7 @@ def require_admin_auth(route_fn):
                 {"WWW-Authenticate": 'Basic realm="Admin Dashboard"'},
             )
 
+        g.admin_actor = _get_request_actor()
         return route_fn(*args, **kwargs)
 
     return wrapper
@@ -329,9 +384,499 @@ def init_db():
     )
 
     _migrate_applications_table(cursor)
+    _init_workflow_history_table(cursor)
+    _init_officers_table(cursor)
+    _seed_officers_table(cursor)
 
     conn.commit()
     conn.close()
+
+
+def _init_workflow_history_table(cursor) -> None:
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS workflow_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            application_id INTEGER NOT NULL,
+            batch_id TEXT NOT NULL,
+            action_type TEXT NOT NULL,
+            field_name TEXT,
+            old_value TEXT,
+            new_value TEXT,
+            previous_state TEXT NOT NULL,
+            new_state TEXT NOT NULL,
+            actor TEXT NOT NULL,
+            context_notes TEXT NOT NULL DEFAULT '',
+            is_critical INTEGER NOT NULL DEFAULT 0,
+            transition_warning TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_workflow_history_application
+        ON workflow_history (application_id, created_at DESC)
+        """
+    )
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_workflow_history_batch
+        ON workflow_history (batch_id)
+        """
+    )
+
+
+def _init_officers_table(cursor) -> None:
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS officers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+        """
+    )
+
+
+def _seed_officers_table(cursor) -> None:
+    cursor.execute(
+        """
+        SELECT DISTINCT assigned_officer AS name
+        FROM applications
+        WHERE assigned_officer IS NOT NULL AND TRIM(assigned_officer) != ''
+        """
+    )
+    for row in cursor.fetchall():
+        cursor.execute(
+            "INSERT OR IGNORE INTO officers (name) VALUES (?)",
+            (row["name"],),
+        )
+
+
+def _ensure_officer_registered(cursor, officer_name: str) -> None:
+    if not officer_name:
+        return
+    cursor.execute("INSERT OR IGNORE INTO officers (name) VALUES (?)", (officer_name,))
+
+
+def _fetch_registered_officers(cursor) -> list[str]:
+    cursor.execute(
+        """
+        SELECT name FROM officers
+        WHERE active = 1
+        ORDER BY name COLLATE NOCASE ASC
+        """
+    )
+    registered = [row["name"] for row in cursor.fetchall()]
+    cursor.execute(
+        """
+        SELECT DISTINCT assigned_officer AS name
+        FROM applications
+        WHERE assigned_officer IS NOT NULL AND TRIM(assigned_officer) != ''
+        ORDER BY assigned_officer COLLATE NOCASE ASC
+        """
+    )
+    seen = {name.casefold() for name in registered}
+    merged = list(registered)
+    for row in cursor.fetchall():
+        name = row["name"]
+        key = name.casefold()
+        if key not in seen:
+            seen.add(key)
+            merged.append(name)
+    return merged
+
+
+def _resolve_officer_name(raw_officer: str, known_officers: list[str]) -> str:
+    normalized = _normalize_officer_name(raw_officer)
+    if not normalized:
+        return ""
+    for known in known_officers:
+        if known.casefold() == normalized.casefold():
+            return known
+    return normalized
+
+
+def _workflow_snapshot_from_row(row: sqlite3.Row | dict) -> dict:
+    return {
+        "status": row["status"],
+        "sub_status": row["sub_status"],
+        "risk_level": row["risk_level"],
+        "assigned_officer": row["assigned_officer"] or "",
+        "flagged_fraud": int(row["flagged_fraud"] or 0),
+        "approval_notes": row["approval_notes"] or "",
+    }
+
+
+def _workflow_snapshot_from_workflow(workflow: dict) -> dict:
+    return {
+        "status": workflow["status"],
+        "sub_status": workflow["sub_status"],
+        "risk_level": workflow["risk_level"],
+        "assigned_officer": workflow["assigned_officer"],
+        "flagged_fraud": workflow["flagged_fraud"],
+        "approval_notes": workflow["approval_notes"],
+    }
+
+
+def _workflow_snapshot_json(snapshot: dict) -> str:
+    payload = {
+        **snapshot,
+        "sub_status": snapshot["sub_status"] or "",
+    }
+    return json.dumps(payload, sort_keys=True)
+
+
+def _format_audit_field_value(field_name: str, value) -> str:
+    if field_name == "flagged_fraud":
+        return "Flagged" if int(value or 0) else "Clear"
+    if field_name == "sub_status":
+        return value or "— None —"
+    if field_name == "assigned_officer":
+        return value or "Unassigned"
+    if field_name == "approval_notes":
+        text = (value or "").strip()
+        return text if text else "—"
+    return str(value or "—")
+
+
+def _diff_workflow_snapshots(before: dict, after: dict) -> list[tuple[str, str, str]]:
+    changes: list[tuple[str, str, str]] = []
+    for field_name in WORKFLOW_AUDIT_FIELDS:
+        old_raw = before[field_name]
+        new_raw = after[field_name]
+        if field_name == "flagged_fraud":
+            old_cmp, new_cmp = int(old_raw or 0), int(new_raw or 0)
+        elif field_name == "approval_notes":
+            old_cmp = (old_raw or "").strip()
+            new_cmp = (new_raw or "").strip()
+        else:
+            old_cmp = old_raw or ""
+            new_cmp = new_raw or ""
+            if field_name == "sub_status":
+                old_cmp = old_cmp or None
+                new_cmp = new_cmp or None
+        if old_cmp != new_cmp:
+            changes.append(
+                (
+                    field_name,
+                    _format_audit_field_value(field_name, old_raw),
+                    _format_audit_field_value(field_name, new_raw),
+                )
+            )
+    return changes
+
+
+def _workflow_change_is_critical(field_name: str, old_value: str, new_value: str) -> bool:
+    if field_name == "flagged_fraud":
+        return new_value == "Flagged"
+    if field_name == "risk_level" and new_value in {"High", "Critical"}:
+        return new_value != old_value
+    if field_name == "status" and new_value in SENSITIVE_AUDIT_STATUSES.union({KPI_REJECTED_STATUS}):
+        return new_value != old_value
+    if field_name == "sub_status" and new_value == KPI_OPS_REVIEW_SUB_STATUS:
+        return new_value != old_value
+    return False
+
+
+def _is_risky_status_transition_warning(current_status: str, next_status: str) -> str | None:
+    if current_status == next_status:
+        return None
+
+    if not _is_allowed_status_transition(current_status, next_status):
+        return (
+            f"Unusual transition from “{current_status}” to “{next_status}” "
+            "(not in the standard allowed path)."
+        )
+
+    if current_status in APPLICATION_STATUSES and next_status in APPLICATION_STATUSES:
+        current_index = APPLICATION_STATUSES.index(current_status)
+        next_index = APPLICATION_STATUSES.index(next_status)
+        if next_index > current_index + 1 and next_status not in {KPI_REJECTED_STATUS, "Loan issued"}:
+            return (
+                f"Skipped intermediate stages moving from “{current_status}” "
+                f"to “{next_status}”."
+            )
+
+    if next_status == "Management approval" and current_status not in {
+        "Approval",
+        "Management approval",
+    }:
+        return "Escalation to Management approval from an early pipeline stage."
+
+    if next_status == KPI_REJECTED_STATUS and current_status in KPI_APPROVED_STATUSES:
+        return "Rejecting an application that was already in a post-approval stage."
+
+    return None
+
+
+def _requires_audit_context(
+    before: dict,
+    after: dict,
+    quick_action: str | None = None,
+) -> bool:
+    if quick_action in QUICK_ACTIONS_REQUIRING_AUDIT_NOTE:
+        return True
+
+    if int(after["flagged_fraud"]) != int(before["flagged_fraud"]):
+        return True
+
+    if after["status"] != before["status"]:
+        if after["status"] in SENSITIVE_AUDIT_STATUSES:
+            return True
+        if _is_risky_status_transition_warning(before["status"], after["status"]):
+            return True
+
+    if after["risk_level"] == "Critical" and after["risk_level"] != before["risk_level"]:
+        return True
+
+    return False
+
+
+def _normalize_audit_context(raw_value: str) -> str:
+    return (raw_value or "").strip()[:MAX_AUDIT_CONTEXT_LENGTH]
+
+
+def _validate_audit_context(raw_value: str, required: bool) -> tuple[str, str | None]:
+    notes = _normalize_audit_context(raw_value)
+    if required and not notes:
+        return "", "An operational note is required for this sensitive workflow action."
+    if len((raw_value or "").strip()) > MAX_AUDIT_CONTEXT_LENGTH:
+        return "", f"Operational note must be {MAX_AUDIT_CONTEXT_LENGTH} characters or fewer."
+    return notes, None
+
+
+def _history_event_summary(field_name: str, old_value: str, new_value: str) -> str:
+    labels = {
+        "status": "Status",
+        "sub_status": "Sub-status",
+        "risk_level": "Risk level",
+        "flagged_fraud": "Fraud flag",
+        "assigned_officer": "Assigned officer",
+        "approval_notes": "Approval notes",
+    }
+    label = labels.get(field_name, field_name.replace("_", " ").title())
+    if field_name == "approval_notes":
+        return f"{label} updated"
+    return f"{label}: {old_value} → {new_value}"
+
+
+def _insert_workflow_history_entries(
+    cursor,
+    *,
+    application_id: int,
+    batch_id: str,
+    actor: str,
+    before: dict,
+    after: dict,
+    changes: list[tuple[str, str, str]],
+    action_type: str,
+    context_notes: str,
+    transition_warning: str | None,
+) -> None:
+    if not changes:
+        return
+
+    previous_state = _workflow_snapshot_json(before)
+    new_state = _workflow_snapshot_json(after)
+
+    for field_name, old_value, new_value in changes:
+        field_action = WORKFLOW_FIELD_ACTION_TYPES.get(field_name, action_type)
+        is_critical = 1 if _workflow_change_is_critical(field_name, old_value, new_value) else 0
+        cursor.execute(
+            """
+            INSERT INTO workflow_history (
+                application_id,
+                batch_id,
+                action_type,
+                field_name,
+                old_value,
+                new_value,
+                previous_state,
+                new_state,
+                actor,
+                context_notes,
+                is_critical,
+                transition_warning,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            """,
+            (
+                application_id,
+                batch_id,
+                field_action,
+                field_name,
+                old_value,
+                new_value,
+                previous_state,
+                new_state,
+                actor,
+                context_notes,
+                is_critical,
+                transition_warning,
+            ),
+        )
+
+
+def _persist_workflow_update(
+    application_id: int,
+    application: sqlite3.Row,
+    workflow: dict,
+    actor: str,
+    *,
+    quick_action: str | None = None,
+    context_notes: str = "",
+    transition_warning: str | None = None,
+) -> None:
+    before = _workflow_snapshot_from_row(application)
+    after = _workflow_snapshot_from_workflow(workflow)
+    changes = _diff_workflow_snapshots(before, after)
+    if not changes:
+        return
+
+    conn = _get_db_connection()
+    cursor = conn.cursor()
+    if workflow["assigned_officer"]:
+        _ensure_officer_registered(cursor, workflow["assigned_officer"])
+    batch_id = secrets.token_hex(8)
+    action_type = QUICK_ACTION_AUDIT_TYPES.get(quick_action or "", "workflow_update")
+
+    cursor.execute(
+        """
+        UPDATE applications
+        SET
+            status = ?,
+            sub_status = ?,
+            risk_level = ?,
+            assigned_officer = ?,
+            approval_notes = ?,
+            flagged_fraud = ?,
+            updated_at = datetime('now')
+        WHERE id = ?
+        """,
+        (
+            workflow["status"],
+            workflow["sub_status"],
+            workflow["risk_level"],
+            workflow["assigned_officer"],
+            workflow["approval_notes"],
+            workflow["flagged_fraud"],
+            application_id,
+        ),
+    )
+
+    _insert_workflow_history_entries(
+        cursor,
+        application_id=application_id,
+        batch_id=batch_id,
+        actor=actor,
+        before=before,
+        after=after,
+        changes=changes,
+        action_type=action_type,
+        context_notes=context_notes,
+        transition_warning=transition_warning,
+    )
+    conn.commit()
+    conn.close()
+
+
+def _log_application_created(cursor, application_id: int) -> None:
+    after = {
+        "status": DEFAULT_APPLICATION_STATUS,
+        "sub_status": None,
+        "risk_level": DEFAULT_RISK_LEVEL,
+        "assigned_officer": "",
+        "flagged_fraud": 0,
+        "approval_notes": "",
+    }
+    before = {
+        "status": "",
+        "sub_status": None,
+        "risk_level": "",
+        "assigned_officer": "",
+        "flagged_fraud": 0,
+        "approval_notes": "",
+    }
+    batch_id = secrets.token_hex(8)
+    _insert_workflow_history_entries(
+        cursor,
+        application_id=application_id,
+        batch_id=batch_id,
+        actor=PUBLIC_INTAKE_ACTOR,
+        before=before,
+        after=after,
+        changes=[("status", "—", DEFAULT_APPLICATION_STATUS)],
+        action_type="application_created",
+        context_notes="Application submitted via public intake form.",
+        transition_warning=None,
+    )
+
+
+def _fetch_workflow_history_rows(cursor, application_id: int, limit: int = WORKFLOW_HISTORY_LIMIT) -> list:
+    cursor.execute(
+        """
+        SELECT
+            id,
+            application_id,
+            batch_id,
+            action_type,
+            field_name,
+            old_value,
+            new_value,
+            previous_state,
+            new_state,
+            actor,
+            context_notes,
+            is_critical,
+            transition_warning,
+            created_at
+        FROM workflow_history
+        WHERE application_id = ?
+        ORDER BY datetime(created_at) DESC, id DESC
+        LIMIT ?
+        """,
+        (application_id, limit),
+    )
+    return cursor.fetchall()
+
+
+def _group_workflow_history_batches(rows: list) -> list[dict]:
+    batches: list[dict] = []
+    index_by_batch: dict[str, int] = {}
+
+    for row in rows:
+        batch_id = row["batch_id"]
+        event = {
+            "field_name": row["field_name"],
+            "summary": _history_event_summary(row["field_name"], row["old_value"], row["new_value"]),
+            "old_value": row["old_value"],
+            "new_value": row["new_value"],
+            "is_critical": bool(row["is_critical"]),
+        }
+        if batch_id in index_by_batch:
+            batch = batches[index_by_batch[batch_id]]
+            batch["events"].append(event)
+            batch["is_critical"] = batch["is_critical"] or event["is_critical"]
+        else:
+            index_by_batch[batch_id] = len(batches)
+            batches.append(
+                {
+                    "batch_id": batch_id,
+                    "action_type": row["action_type"],
+                    "actor": row["actor"],
+                    "created_at": row["created_at"],
+                    "context_notes": row["context_notes"] or "",
+                    "transition_warning": row["transition_warning"] or "",
+                    "is_critical": bool(row["is_critical"]),
+                    "events": [event],
+                }
+            )
+
+    return batches
 
 
 def _parse_admin_list_filters(args) -> dict:
@@ -665,15 +1210,7 @@ def _overview_drilldown_links() -> dict[str, str]:
 
 
 def _fetch_distinct_officers(cursor) -> list[str]:
-    cursor.execute(
-        """
-        SELECT DISTINCT assigned_officer
-        FROM applications
-        WHERE assigned_officer IS NOT NULL AND TRIM(assigned_officer) != ''
-        ORDER BY assigned_officer COLLATE NOCASE ASC
-        """
-    )
-    return [row["assigned_officer"] for row in cursor.fetchall()]
+    return _fetch_registered_officers(cursor)
 
 
 def _parse_analytics_range(args) -> str:
@@ -954,12 +1491,12 @@ def _fetch_analytics_backlog_snapshot(cursor) -> dict:
 
 
 def _fetch_analytics_activity_summary(cursor, range_key: str) -> dict:
-    updated_clause, updated_params = _analytics_datetime_clause(range_key, "updated_at")
+    updated_clause, updated_params = _analytics_datetime_clause(range_key, "created_at")
     cursor.execute(
         f"""
-        SELECT COUNT(*) AS updates_in_period
-        FROM applications
-        WHERE updated_at IS NOT NULL AND updated_at != ''{updated_clause}
+        SELECT COUNT(DISTINCT batch_id) AS updates_in_period
+        FROM workflow_history
+        WHERE created_at IS NOT NULL AND created_at != ''{updated_clause}
         """,
         updated_params,
     )
@@ -1054,6 +1591,36 @@ def dashboard_workflow_status_groups():
 @app.template_global()
 def dashboard_workflow_sub_status_groups():
     return WORKFLOW_SUB_STATUS_GROUPS
+
+
+@app.template_global()
+def dashboard_history_batch_class(batch: dict) -> str:
+    classes: list[str] = []
+    if batch.get("is_critical"):
+        classes.append("dashboard-history-batch-critical")
+    if batch.get("transition_warning"):
+        classes.append("dashboard-history-batch-warning")
+    return " ".join(classes)
+
+
+@app.template_global()
+def dashboard_history_action_label(action_type: str) -> str:
+    labels = {
+        "application_created": "Application created",
+        "workflow_update": "Workflow update",
+        "quick_action_advance": "Quick action: advance status",
+        "quick_action_margin_to_act": "Quick action: Margin to act",
+        "quick_action_clear_sub_status": "Quick action: clear sub-status",
+        "quick_action_high_risk": "Quick action: set high risk",
+        "quick_action_clear_fraud": "Quick action: clear fraud flag",
+        "status_change": "Status change",
+        "sub_status_change": "Sub-status change",
+        "risk_level_change": "Risk level change",
+        "fraud_flag_change": "Fraud flag change",
+        "officer_assignment": "Officer assignment",
+        "notes_update": "Notes update",
+    }
+    return labels.get(action_type, action_type.replace("_", " ").title())
 
 
 def _fetch_application(application_id: int) -> sqlite3.Row | None:
@@ -1348,6 +1915,8 @@ def apply():
             DEFAULT_APPLICATION_STATUS,
         ),
     )
+    application_id = cursor.lastrowid
+    _log_application_created(cursor, application_id)
 
     conn.commit()
     conn.close()
@@ -1545,8 +2114,18 @@ def admin_application_detail(application_id: int):
     if application is None:
         return Response("Application not found.", status=404)
 
+    conn = _get_db_connection()
+    cursor = conn.cursor()
+    history_rows = _fetch_workflow_history_rows(cursor, application_id)
+    officers = _fetch_registered_officers(cursor)
+    conn.close()
+
     csrf_token = _ensure_session_csrf_token()
     next_status = _next_pipeline_status(application["status"])
+    status_transition_hint = _is_risky_status_transition_warning(
+        application["status"],
+        next_status or application["status"],
+    )
     return render_template(
         "application_detail.html",
         application=application,
@@ -1554,8 +2133,12 @@ def admin_application_detail(application_id: int):
         statuses=APPLICATION_STATUSES,
         sub_statuses=APPLICATION_SUB_STATUSES,
         risk_levels=APPLICATION_RISK_LEVELS,
+        officers=officers,
         next_pipeline_status=next_status,
         needs_attention=_application_needs_attention(application),
+        timeline_batches=_group_workflow_history_batches(history_rows),
+        admin_actor=getattr(g, "admin_actor", _get_request_actor()),
+        status_transition_hint=status_transition_hint,
         active_nav="applications",
         page_title=f"Application #{application_id}",
         list_return_url=_safe_return_url(request.args.get("return")),
@@ -1573,7 +2156,14 @@ def admin_application_workflow(application_id: int):
     if application is None:
         return Response("Application not found.", status=404)
 
+    actor = getattr(g, "admin_actor", _get_request_actor())
     action = (request.form.get("workflow_action") or "").strip()
+
+    conn = _get_db_connection()
+    cursor = conn.cursor()
+    officers = _fetch_registered_officers(cursor)
+    conn.close()
+
     if action:
         workflow, validation_error = _apply_workflow_quick_action(request.form, application)
     else:
@@ -1588,38 +2178,48 @@ def admin_application_workflow(application_id: int):
         flash("Could not save workflow changes. Check the form and try again.", "error")
         return redirect(url_for("admin_application_detail", application_id=application_id))
 
-    conn = _get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        UPDATE applications
-        SET
-            status = ?,
-            sub_status = ?,
-            risk_level = ?,
-            assigned_officer = ?,
-            approval_notes = ?,
-            flagged_fraud = ?,
-            updated_at = datetime('now')
-        WHERE id = ?
-        """,
-        (
-            workflow["status"],
-            workflow["sub_status"],
-            workflow["risk_level"],
-            workflow["assigned_officer"],
-            workflow["approval_notes"],
-            workflow["flagged_fraud"],
-            application_id,
-        ),
-    )
-    conn.commit()
-    conn.close()
+    workflow["assigned_officer"] = _resolve_officer_name(workflow["assigned_officer"], officers)
 
-    flash(
-        f"Workflow saved for application #{application_id} — status is now “{workflow['status']}”.",
-        "success",
+    before_snapshot = _workflow_snapshot_from_row(application)
+    after_snapshot = _workflow_snapshot_from_workflow(workflow)
+    audit_required = _requires_audit_context(before_snapshot, after_snapshot, action or None)
+    context_notes, audit_error = _validate_audit_context(
+        request.form.get("audit_context", ""),
+        audit_required,
     )
+    if audit_error:
+        flash(audit_error, "error")
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    transition_warning = None
+    if before_snapshot["status"] != after_snapshot["status"]:
+        transition_warning = _is_risky_status_transition_warning(
+            before_snapshot["status"],
+            after_snapshot["status"],
+        )
+
+    _persist_workflow_update(
+        application_id,
+        application,
+        workflow,
+        actor,
+        quick_action=action or None,
+        context_notes=context_notes,
+        transition_warning=transition_warning,
+    )
+
+    flash_message = (
+        f"Workflow saved for application #{application_id} — status is now “{workflow['status']}”. "
+        f"Recorded under operator “{actor}”."
+    )
+    if transition_warning:
+        flash_message += f" Note: {transition_warning}"
+    flash(flash_message, "success")
+    if not workflow["assigned_officer"] and workflow["status"] in KPI_ACTIVE_PIPELINE_STATUSES:
+        flash(
+            "This pipeline case has no assigned officer. Assign one for operational accountability.",
+            "info",
+        )
     return redirect(url_for("admin_application_detail", application_id=application_id))
 
 
