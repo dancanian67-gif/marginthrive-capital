@@ -11,6 +11,20 @@ Minimal Flask app for financing applications and admin review.
 4. Run:
    - `python app.py`
 
+## Project structure (Phase C1)
+
+```
+app.py                 # Entry point
+factory.py             # Flask app factory
+template_helpers.py    # Jinja template globals
+constants/             # Domain, workflow, analytics, audit, reporting constants
+utils/                 # Auth, CSRF, env, CSV export, time-range SQL helpers
+repositories/          # SQLite access (applications, audit, officers, database init)
+services/              # Workflow, audit, analytics, reporting, filters, intake
+routes/                # HTTP routes (public + admin blueprints)
+templates/             # Jinja templates and partials
+```
+
 ## Environment variables
 
 - `APP_ENV` - `development` or `production`
