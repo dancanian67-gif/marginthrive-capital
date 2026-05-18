@@ -2,7 +2,7 @@
 
 from flask import Flask
 
-from routes import admin, public
+from routes import admin, auth, health, operators, public
 
 
 def _register_legacy_blueprint_endpoints(app: Flask, blueprint_name: str) -> None:
@@ -25,6 +25,11 @@ def _register_legacy_blueprint_endpoints(app: Flask, blueprint_name: str) -> Non
 
 
 def register_routes(app: Flask) -> None:
+    app.register_blueprint(health.bp)
     app.register_blueprint(public.bp)
+    app.register_blueprint(auth.bp)
     app.register_blueprint(admin.bp)
+    app.register_blueprint(operators.bp)
     _register_legacy_blueprint_endpoints(app, "admin")
+    _register_legacy_blueprint_endpoints(app, "auth")
+    _register_legacy_blueprint_endpoints(app, "operators")

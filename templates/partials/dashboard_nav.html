@@ -1,5 +1,16 @@
 <aside class="dashboard-nav" aria-label="Admin navigation">
     <p class="dashboard-nav-brand">Margin<span>Thrive</span> Ops</p>
+
+    {% if current_operator %}
+    <div class="dashboard-nav-session">
+        <p class="dashboard-nav-session-name">{{ current_operator.display_name }}</p>
+        <p class="dashboard-nav-session-meta">
+            @{{ current_operator.username }}
+            · {{ current_operator.role_label }}
+        </p>
+    </div>
+    {% endif %}
+
     <nav class="dashboard-nav-links">
         <a
             href="{{ url_for('admin_overview') }}"
@@ -25,5 +36,20 @@
         >
             Reports
         </a>
+        {% if current_operator and current_operator.role == 'administrator' %}
+        <a
+            href="{{ url_for('admin_operators') }}"
+            class="dashboard-nav-link{% if active_nav == 'operators' %} is-active{% endif %}"
+        >
+            Operators
+        </a>
+        {% endif %}
     </nav>
+
+    {% if current_operator %}
+    <form method="POST" action="{{ url_for('admin_logout') }}" class="dashboard-nav-logout">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="dashboard-nav-logout-btn">Sign out</button>
+    </form>
+    {% endif %}
 </aside>

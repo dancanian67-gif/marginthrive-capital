@@ -22,6 +22,7 @@ from constants.workflow import (
 from repositories.database import get_db_connection
 from repositories.officers import ensure_officer_registered
 from services.workflow import is_allowed_status_transition
+from utils.ops_logging import log_governance_event, log_workflow_failure
 
 def workflow_snapshot_from_row(row: sqlite3.Row | dict) -> dict:
     return {
@@ -261,51 +262,72 @@ def persist_workflow_update(
     if not changes:
         return
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    if workflow["assigned_officer"]:
-        ensure_officer_registered(cursor, workflow["assigned_officer"])
     batch_id = secrets.token_hex(8)
     action_type = QUICK_ACTION_AUDIT_TYPES.get(quick_action or "", "workflow_update")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        if workflow["assigned_officer"]:
+            ensure_officer_registered(cursor, workflow["assigned_officer"])
 
-    cursor.execute(
-        """
-        UPDATE applications
-        SET
-            status = ?,
-            sub_status = ?,
-            risk_level = ?,
-            assigned_officer = ?,
-            approval_notes = ?,
-            flagged_fraud = ?,
-            updated_at = datetime('now')
-        WHERE id = ?
-        """,
-        (
-            workflow["status"],
-            workflow["sub_status"],
-            workflow["risk_level"],
-            workflow["assigned_officer"],
-            workflow["approval_notes"],
-            workflow["flagged_fraud"],
-            application_id,
-        ),
-    )
+        cursor.execute(
+            """
+            UPDATE applications
+            SET
+                status = ?,
+                sub_status = ?,
+                risk_level = ?,
+                assigned_officer = ?,
+                approval_notes = ?,
+                flagged_fraud = ?,
+                updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (
+                workflow["status"],
+                workflow["sub_status"],
+                workflow["risk_level"],
+                workflow["assigned_officer"],
+                workflow["approval_notes"],
+                workflow["flagged_fraud"],
+                application_id,
+            ),
+        )
 
-    insert_workflow_history_entries(
-        cursor,
-        application_id=application_id,
-        batch_id=batch_id,
-        actor=actor,
-        before=before,
-        after=after,
-        changes=changes,
-        action_type=action_type,
-        context_notes=context_notes,
-        transition_warning=transition_warning,
-    )
-    conn.commit()
-    conn.close()
+        insert_workflow_history_entries(
+            cursor,
+            application_id=application_id,
+            batch_id=batch_id,
+            actor=actor,
+            before=before,
+            after=after,
+            changes=changes,
+            action_type=action_type,
+            context_notes=context_notes,
+            transition_warning=transition_warning,
+        )
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        log_workflow_failure(
+            "Workflow persistence failed in audit service",
+            application_id=application_id,
+            actor=actor,
+            quick_action=quick_action,
+            error=str(exc),
+        )
+        raise
+    finally:
+        conn.close()
+
+    if any(workflow_change_is_critical(field, old, new) for field, old, new in changes):
+        log_governance_event(
+            "Critical workflow change recorded",
+            critical=True,
+            application_id=application_id,
+            actor=actor,
+            batch_id=batch_id,
+        )
 
 
 def group_workflow_history_batches(rows: list) -> list[dict]:

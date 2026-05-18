@@ -1970,3 +1970,108 @@ input, select {
     gap: var(--space-md);
     flex-wrap: wrap;
 }
+
+/* ===== OPERATOR AUTH & GOVERNANCE (Phase C2) ===== */
+.dashboard-login-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-lg);
+}
+
+.dashboard-login-shell {
+    width: min(420px, 100%);
+}
+
+.dashboard-login-card {
+    padding: var(--space-lg);
+}
+
+.dashboard-login-header {
+    margin-bottom: var(--space-md);
+}
+
+.dashboard-login-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-md);
+}
+
+.dashboard-login-submit {
+    width: 100%;
+    margin-top: var(--space-sm);
+}
+
+.dashboard-login-footnote {
+    margin: var(--space-md) 0 0;
+    font-size: 0.875rem;
+    color: #94a3b8;
+    line-height: 1.5;
+}
+
+.dashboard-nav-session {
+    margin-bottom: var(--space-md);
+    padding-bottom: var(--space-md);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.dashboard-nav-session-name {
+    margin: 0;
+    font-weight: 600;
+    color: #f8fafc;
+    font-size: 0.95rem;
+}
+
+.dashboard-nav-session-meta {
+    margin: 4px 0 0;
+    font-size: 0.8rem;
+    color: #94a3b8;
+}
+
+.dashboard-nav-logout {
+    margin-top: var(--space-md);
+}
+
+.dashboard-nav-logout-btn {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    background: rgba(2, 6, 23, 0.45);
+    color: #e2e8f0;
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.dashboard-nav-logout-btn:hover {
+    border-color: rgba(248, 113, 113, 0.45);
+    background: rgba(127, 29, 29, 0.25);
+}
+
+.dashboard-operators-create {
+    margin-bottom: var(--space-lg);
+}
+
+.dashboard-operators-form-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--space-md);
+    margin-bottom: var(--space-md);
+}
+
+.dashboard-inline-form {
+    margin: 0;
+}
+
+.dashboard-inline-form select {
+    min-width: 10rem;
+}
+
+.dashboard-btn-compact {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+}

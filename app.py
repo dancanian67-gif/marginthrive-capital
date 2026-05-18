@@ -1,8 +1,8 @@
 """MarginThrive Capital application entry point."""
 
-from factory import create_app, run_dev_server
+from factory import initialize_application, run_dev_server
 
-app = create_app()
+app = initialize_application()
 
 if __name__ == "__main__":
-    run_dev_server()
+    run_dev_server(app)

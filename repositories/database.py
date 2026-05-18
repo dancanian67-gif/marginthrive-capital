@@ -96,10 +96,13 @@ def init_db():
     _migrate_applications_table(cursor)
     from repositories.audit import init_workflow_history_table
     from repositories.officers import init_officers_table, seed_officers_table
+    from repositories.operators import init_operators_table, seed_bootstrap_operator
 
     init_workflow_history_table(cursor)
     init_officers_table(cursor)
     seed_officers_table(cursor)
+    init_operators_table(cursor)
+    seed_bootstrap_operator(cursor)
 
     conn.commit()
     conn.close()

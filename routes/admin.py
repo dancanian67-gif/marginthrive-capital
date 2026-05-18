@@ -73,6 +73,9 @@ from services.workflow import (
 from utils.auth import get_request_actor, require_admin_auth
 from utils.csv_export import distribution_export_rows, make_csv_response, make_sectioned_csv_response
 from utils.csrf import ensure_session_csrf_token, validate_csrf
+from utils.errors import flash_operational_error
+from utils.operational import log_admin_export
+from utils.ops_logging import log_workflow_failure
 from utils.time_range import parse_analytics_range
 
 bp = Blueprint("admin", __name__)
@@ -206,7 +209,9 @@ def admin_export_applications():
     conn.close()
 
     suffix = "filtered" if filters_have_constraints(filters) else "all"
-    return make_csv_response(f"applications_{suffix}.csv", APPLICATION_EXPORT_COLUMNS, rows)
+    filename = f"applications_{suffix}.csv"
+    log_admin_export("applications", filename=filename, row_count=len(rows), filtered=suffix == "filtered")
+    return make_csv_response(filename, APPLICATION_EXPORT_COLUMNS, rows)
 
 
 @bp.route("/admin/export/audit")
@@ -226,7 +231,15 @@ def admin_export_audit():
     filename = f"audit_history_{range_key}"
     if application_id is not None:
         filename += f"_app_{application_id}"
-    return make_csv_response(f"{filename}.csv", AUDIT_EXPORT_COLUMNS, rows)
+    csv_name = f"{filename}.csv"
+    log_admin_export(
+        "audit",
+        filename=csv_name,
+        row_count=len(rows),
+        range_key=range_key,
+        application_id=application_id,
+    )
+    return make_csv_response(csv_name, AUDIT_EXPORT_COLUMNS, rows)
 
 
 @bp.route("/admin/export/report/<report_type>")
@@ -246,14 +259,18 @@ def admin_export_report(report_type: str):
 
     if report_type == "pipeline":
         rows = distribution_export_rows(data["pipeline_distribution"])
-        return make_csv_response(f"pipeline_summary_{range_key}.csv", dist_columns, rows)
+        filename = f"pipeline_summary_{range_key}.csv"
+        log_admin_export("report_pipeline", filename=filename, range_key=range_key, row_count=len(rows))
+        return make_csv_response(filename, dist_columns, rows)
 
     if report_type == "risk":
         sections = [
             ("Period risk (created in range)", dist_columns, distribution_export_rows(data["risk_distribution"])),
             ("Portfolio risk (live)", dist_columns, distribution_export_rows(data["portfolio_risk"])),
         ]
-        return make_sectioned_csv_response(f"risk_exposure_{range_key}.csv", sections)
+        filename = f"risk_exposure_{range_key}.csv"
+        log_admin_export("report_risk", filename=filename, range_key=range_key)
+        return make_sectioned_csv_response(filename, sections)
 
     if report_type == "outcomes":
         outcome = data["outcome_summary"]
@@ -271,7 +288,9 @@ def admin_export_report(report_type: str):
             ("Approval and rejection summary", metric_columns, rows),
             ("Period status distribution", dist_columns, status_rows),
         ]
-        return make_sectioned_csv_response(f"approval_outcomes_{range_key}.csv", sections)
+        filename = f"approval_outcomes_{range_key}.csv"
+        log_admin_export("report_outcomes", filename=filename, range_key=range_key)
+        return make_sectioned_csv_response(filename, sections)
 
     if report_type == "fraud":
         fraud = data["fraud_summary"]
@@ -292,7 +311,9 @@ def admin_export_report(report_type: str):
             ("Fraud review summary", metric_columns, summary_rows),
             ("Fraud-flagged applications", APPLICATION_EXPORT_COLUMNS, fraud_apps),
         ]
-        return make_sectioned_csv_response(f"fraud_review_{range_key}.csv", sections)
+        filename = f"fraud_review_{range_key}.csv"
+        log_admin_export("report_fraud", filename=filename, range_key=range_key, row_count=len(fraud_apps))
+        return make_sectioned_csv_response(filename, sections)
 
     if report_type == "officers":
         rows = [
@@ -312,7 +333,9 @@ def admin_export_report(report_type: str):
             ("fraud_count", "fraud_count"),
             ("load_share_pct", "load_share_pct"),
         )
-        return make_csv_response(f"officer_workload_{range_key}.csv", officer_columns, rows)
+        filename = f"officer_workload_{range_key}.csv"
+        log_admin_export("report_officers", filename=filename, range_key=range_key, row_count=len(rows))
+        return make_csv_response(filename, officer_columns, rows)
 
     if report_type == "backlog":
         rows = distribution_export_rows(data["backlog"]["pipeline_backlog"])
@@ -325,7 +348,9 @@ def admin_export_report(report_type: str):
             ("Backlog summary", metric_columns, summary_rows),
             ("Pipeline stage backlog", dist_columns, rows),
         ]
-        return make_sectioned_csv_response(f"operational_backlog_{range_key}.csv", sections)
+        filename = f"operational_backlog_{range_key}.csv"
+        log_admin_export("report_backlog", filename=filename, range_key=range_key)
+        return make_sectioned_csv_response(filename, sections)
 
     # operational — bundled executive export
     gov = data["governance"]
@@ -359,7 +384,9 @@ def admin_export_report(report_type: str):
             ],
         ),
     ]
-    return make_sectioned_csv_response(f"operational_report_{range_key}.csv", sections)
+    filename = f"operational_report_{range_key}.csv"
+    log_admin_export("report_operational", filename=filename, range_key=range_key)
+    return make_sectioned_csv_response(filename, sections)
 
 
 @bp.route('/admin')
@@ -542,15 +569,26 @@ def admin_application_workflow(application_id: int):
             after_snapshot["status"],
         )
 
-    persist_workflow_update(
-        application_id,
-        application,
-        workflow,
-        actor,
-        quick_action=action or None,
-        context_notes=context_notes,
-        transition_warning=transition_warning,
-    )
+    try:
+        persist_workflow_update(
+            application_id,
+            application,
+            workflow,
+            actor,
+            quick_action=action or None,
+            context_notes=context_notes,
+            transition_warning=transition_warning,
+        )
+    except Exception as exc:
+        log_workflow_failure(
+            "Workflow update could not be persisted",
+            application_id=application_id,
+            actor=actor,
+            quick_action=action or None,
+            error=str(exc),
+        )
+        flash_operational_error()
+        return redirect(url_for("admin_application_detail", application_id=application_id))
 
     flash_message = (
         f"Workflow saved for application #{application_id} — status is now “{workflow['status']}”. "

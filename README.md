@@ -7,21 +7,22 @@ Minimal Flask app for financing applications and admin review.
 1. Create and activate a virtual environment.
 2. Install dependencies:
    - `pip install -r requirements.txt`
-3. Copy `.env.example` to `.env` and set secure values (especially `ADMIN_USERNAME` and `ADMIN_PASSWORD` — without them, `/admin` shows “Admin credentials are not configured.”).
+3. Copy `.env.example` to `.env` and set secure values (`SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`). On first startup, these bootstrap the initial administrator operator account when no operators exist yet.
 4. Run:
    - `python app.py`
 
-## Project structure (Phase C1)
+## Project structure (Phase C1–C2)
 
 ```
 app.py                 # Entry point
 factory.py             # Flask app factory
 template_helpers.py    # Jinja template globals
-constants/             # Domain, workflow, analytics, audit, reporting constants
-utils/                 # Auth, CSRF, env, CSV export, time-range SQL helpers
-repositories/          # SQLite access (applications, audit, officers, database init)
-services/              # Workflow, audit, analytics, reporting, filters, intake
-routes/                # HTTP routes (public + admin blueprints)
+constants/             # Domain, workflow, analytics, audit, reporting, operator constants
+config/                # Environment-aware Flask configuration
+utils/                 # Logging, auth, CSRF, env validation, backup, error handling
+repositories/          # SQLite access (applications, audit, officers, operators, database init)
+services/              # Workflow, audit, analytics, reporting, filters, intake, operators
+routes/                # HTTP routes (public, auth, admin, operators blueprints)
 templates/             # Jinja templates and partials
 ```
 
@@ -31,14 +32,34 @@ templates/             # Jinja templates and partials
 - `FLASK_ENV` - optional Flask env setting
 - `FLASK_DEBUG` - `true`/`false` debug toggle (effective in development)
 - `SECRET_KEY` - required, must be strong in production
-- `ADMIN_USERNAME` - required for `/admin`
-- `ADMIN_PASSWORD` - required for `/admin`
+- `ADMIN_USERNAME` / `ADMIN_PASSWORD` - bootstrap the first administrator when the `operators` table is empty
+- `ADMIN_EMAIL` / `ADMIN_DISPLAY_NAME` - optional bootstrap profile fields
+
+## Operator authentication (Phase C2)
+
+- `/admin/login` — session-based operator sign-in (replaces HTTP Basic Auth)
+- `/admin/logout` — POST sign-out
+- `/admin/operators` — administrator-only operator account management
+- Passwords are stored as Werkzeug password hashes; sessions expire after 8 hours of inactivity
+- Workflow audit history, exports, and governance views attribute actions to the signed-in operator (`display_name (username)` when set)
+- Operational roles: `administrator`, `review_officer`, `analyst`, `operations_manager` (all active operators retain access to existing operational routes; only administrators manage operator accounts)
+
+## Production readiness (Phase D1)
+
+- **WSGI entrypoint:** `wsgi:application` (see [docs/OPERATIONS.md](docs/OPERATIONS.md))
+- **Health checks:** `GET /health` (live), `GET /health/ready` (database readiness)
+- **Operational logging:** structured `marginthrive.ops` logger (`LOG_LEVEL`, optional `LOG_FILE`)
+- **Backups:** `python tools/backup_database.py`
+- **Login protection:** in-memory lockout after repeated failed sign-ins
+
+Deploy with Gunicorn behind a TLS reverse proxy. Set `APP_ENV=production`, a strong `SECRET_KEY`, and `TRUST_PROXY=true` when using a proxy.
 
 ## Production notes
 
 - Do not run with debug enabled in production.
-- Set a strong `SECRET_KEY` and admin credentials via environment variables.
+- Set a strong `SECRET_KEY` and bootstrap or provision operator accounts.
 - Keep `.env` out of version control.
+- See [docs/OPERATIONS.md](docs/OPERATIONS.md) for backup, recovery, and incident guidance.
 
 ## Workflow schema (Phase A1)
 

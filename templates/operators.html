@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% include 'partials/dashboard_head.html' %}
+</head>
+<body>
+
+<div class="dashboard-page">
+    <div class="dashboard-layout">
+        {% include 'partials/dashboard_nav.html' %}
+
+        <main class="dashboard-shell dashboard-content dashboard-main">
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <h1 class="dashboard-title">Operator accounts</h1>
+                    <p class="dashboard-subtitle">Manage authenticated financing operators and roles</p>
+                </header>
+
+                {% include 'partials/dashboard_flash.html' %}
+
+                <div class="dashboard-glass dashboard-card dashboard-operators-create">
+                    <h2 class="dashboard-card-title">Create operator</h2>
+                    <form method="POST" action="{{ url_for('admin_operators_create') }}" class="dashboard-form dashboard-operators-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <div class="dashboard-operators-form-grid">
+                            <div class="dashboard-form-row">
+                                <label for="username">Username</label>
+                                <input id="username" name="username" type="text" required>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="email">Email</label>
+                                <input id="email" name="email" type="email" required>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="display_name">Display name</label>
+                                <input id="display_name" name="display_name" type="text" placeholder="Optional">
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="role">Role</label>
+                                <select id="role" name="role" required>
+                                    {% for role in roles %}
+                                    <option value="{{ role }}">{{ role_labels[role] }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="password">Password</label>
+                                <input id="password" name="password" type="password" required>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="password_confirm">Confirm password</label>
+                                <input id="password_confirm" name="password_confirm" type="password" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="dashboard-btn-primary">Create operator</button>
+                    </form>
+                </div>
+
+                <div class="dashboard-table-wrap dashboard-glass">
+                    <table class="dashboard-table">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Email</th>
+                                <th>Display name</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Last sign-in</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for operator in operators %}
+                            <tr>
+                                <td>{{ operator['username'] }}</td>
+                                <td>{{ operator['email'] }}</td>
+                                <td>{{ operator['display_name'] or '—' }}</td>
+                                <td>
+                                    <form
+                                        method="POST"
+                                        action="{{ url_for('admin_operators_update_role', operator_id=operator['id']) }}"
+                                        class="dashboard-inline-form dashboard-form"
+                                    >
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <select name="role" onchange="this.form.submit()">
+                                            {% for role in roles %}
+                                            <option value="{{ role }}"{% if operator['role'] == role %} selected{% endif %}>
+                                                {{ role_labels[role] }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                    </form>
+                                </td>
+                                <td>
+                                    {% if operator['active'] %}
+                                    <span class="dashboard-badge dashboard-badge-status-approved">Active</span>
+                                    {% else %}
+                                    <span class="dashboard-badge dashboard-badge-status-neutral">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ operator['last_login_at'] or '—' }}</td>
+                                <td>
+                                    {% if operator['active'] %}
+                                    <form
+                                        method="POST"
+                                        action="{{ url_for('admin_operators_update_status', operator_id=operator['id']) }}"
+                                        class="dashboard-inline-form"
+                                    >
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <input type="hidden" name="action" value="deactivate">
+                                        <button type="submit" class="dashboard-btn-secondary dashboard-btn-compact">Deactivate</button>
+                                    </form>
+                                    {% else %}
+                                    <form
+                                        method="POST"
+                                        action="{{ url_for('admin_operators_update_status', operator_id=operator['id']) }}"
+                                        class="dashboard-inline-form"
+                                    >
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                        <input type="hidden" name="action" value="activate">
+                                        <button type="submit" class="dashboard-btn-secondary dashboard-btn-compact">Reactivate</button>
+                                    </form>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7">No operator accounts yet.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+
+</body>
+</html>

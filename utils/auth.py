@@ -1,62 +1,115 @@
-import base64
-import hmac
-import os
 from functools import wraps
 
-from flask import Response, g, request
+from flask import Response, g, redirect, request, session, url_for
 
-def _parse_basic_auth_credentials(auth_header: str | None) -> tuple[str, str] | None:
-    if not auth_header or not auth_header.startswith("Basic "):
+from constants.operators import (
+    SESSION_OPERATOR_DISPLAY_NAME,
+    SESSION_OPERATOR_ID,
+    SESSION_OPERATOR_ROLE,
+    SESSION_OPERATOR_USERNAME,
+    can_manage_operators,
+    role_label,
+)
+from repositories.database import get_db_connection
+from repositories.operators import fetch_operator_by_id
+
+
+def operator_audit_label(operator: dict) -> str:
+    username = operator["username"]
+    display_name = (operator.get("display_name") or "").strip()
+    if display_name and display_name.casefold() != username.casefold():
+        return f"{display_name} ({username})"
+    return username
+
+
+def operator_from_session() -> dict | None:
+    operator_id = session.get(SESSION_OPERATOR_ID)
+    if not operator_id:
         return None
 
-    try:
-        encoded_credentials = auth_header.split(" ", 1)[1]
-        decoded = base64.b64decode(encoded_credentials).decode("utf-8")
-        username, password = decoded.split(":", 1)
-        return username, password
-    except Exception:
+    return {
+        "id": operator_id,
+        "username": session.get(SESSION_OPERATOR_USERNAME, ""),
+        "role": session.get(SESSION_OPERATOR_ROLE, ""),
+        "display_name": session.get(SESSION_OPERATOR_DISPLAY_NAME, ""),
+    }
+
+
+def establish_operator_session(operator_row) -> None:
+    session.clear()
+    session.permanent = True
+    session[SESSION_OPERATOR_ID] = operator_row["id"]
+    session[SESSION_OPERATOR_USERNAME] = operator_row["username"]
+    session[SESSION_OPERATOR_ROLE] = operator_row["role"]
+    session[SESSION_OPERATOR_DISPLAY_NAME] = operator_row["display_name"] or operator_row["username"]
+
+
+def clear_operator_session() -> None:
+    session.clear()
+
+
+def load_active_operator(operator_id: int) -> dict | None:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    row = fetch_operator_by_id(cursor, operator_id)
+    conn.close()
+    if row is None or not row["active"]:
         return None
-
-
-def _check_admin_auth(auth_header: str | None) -> bool:
-    credentials = _parse_basic_auth_credentials(auth_header)
-    if not credentials:
-        return False
-
-    expected_username = os.getenv("ADMIN_USERNAME")
-    expected_password = os.getenv("ADMIN_PASSWORD")
-    if not expected_username or not expected_password:
-        return False
-
-    username, password = credentials
-    return hmac.compare_digest(username, expected_username) and hmac.compare_digest(password, expected_password)
+    return {
+        "id": row["id"],
+        "username": row["username"],
+        "email": row["email"],
+        "display_name": row["display_name"] or row["username"],
+        "role": row["role"],
+        "active": bool(row["active"]),
+        "role_label": role_label(row["role"]),
+    }
 
 
 def get_request_actor() -> str:
-    configured = os.getenv("ADMIN_USERNAME")
-    credentials = _parse_basic_auth_credentials(request.headers.get("Authorization"))
-    if credentials:
-        username, _password = credentials
-        if configured and hmac.compare_digest(username, configured):
-            return username
-        return username
-    return configured or "admin"
+    operator = getattr(g, "operator", None) or operator_from_session()
+    if operator:
+        return operator_audit_label(operator)
+    return "unknown-operator"
+
+
+def safe_login_redirect(candidate: str | None) -> str:
+    target = (candidate or "").strip()
+    if target.startswith("/admin") and "://" not in target and not target.startswith("//"):
+        return target
+    return url_for("admin_overview")
 
 
 def require_admin_auth(route_fn):
+    """Require an authenticated, active operator session (replaces HTTP Basic Auth)."""
+
     @wraps(route_fn)
     def wrapper(*args, **kwargs):
-        if not (os.getenv("ADMIN_USERNAME") and os.getenv("ADMIN_PASSWORD")):
-            return Response("Admin credentials are not configured.", status=503)
+        session_operator = operator_from_session()
+        if not session_operator:
+            return redirect(url_for("admin_login", next=request.full_path))
 
-        if not _check_admin_auth(request.headers.get("Authorization")):
-            return Response(
-                "Authentication required",
-                401,
-                {"WWW-Authenticate": 'Basic realm="Admin Dashboard"'},
-            )
+        operator = load_active_operator(session_operator["id"])
+        if operator is None:
+            clear_operator_session()
+            return redirect(url_for("admin_login", next=request.full_path))
 
-        g.admin_actor = get_request_actor()
+        g.operator = operator
+        g.admin_actor = operator_audit_label(operator)
+        return route_fn(*args, **kwargs)
+
+    return wrapper
+
+
+def require_administrator(route_fn):
+    """Require administrator role for operator management actions."""
+
+    @wraps(route_fn)
+    @require_admin_auth
+    def wrapper(*args, **kwargs):
+        operator = getattr(g, "operator", None)
+        if not operator or not can_manage_operators(operator["role"]):
+            return Response("Administrator access required.", status=403)
         return route_fn(*args, **kwargs)
 
     return wrapper

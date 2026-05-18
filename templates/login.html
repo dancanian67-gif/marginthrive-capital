@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% include 'partials/dashboard_head.html' %}
+</head>
+<body class="dashboard-login-page">
+
+<main class="dashboard-login-shell">
+    <section class="dashboard-login-card dashboard-glass">
+        <header class="dashboard-login-header">
+            <p class="dashboard-nav-brand">Margin<span>Thrive</span> Ops</p>
+            <h1 class="dashboard-title">Operator sign in</h1>
+            <p class="dashboard-subtitle">Secure access to financing operations</p>
+        </header>
+
+        {% include 'partials/dashboard_flash.html' %}
+
+        <form method="POST" action="{{ url_for('admin_login') }}" class="dashboard-form dashboard-login-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="next" value="{{ next_url }}">
+
+            <div class="dashboard-form-row">
+                <label for="identity">Username or email</label>
+                <input id="identity" name="identity" type="text" autocomplete="username" required autofocus>
+            </div>
+
+            <div class="dashboard-form-row">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" autocomplete="current-password" required>
+            </div>
+
+            <button type="submit" class="dashboard-btn-primary dashboard-login-submit">Sign in</button>
+        </form>
+
+        <p class="dashboard-login-footnote">
+            Public application intake remains available on the
+            <a class="dashboard-link" href="{{ url_for('public.home') }}">home page</a>.
+        </p>
+    </section>
+</main>
+
+</body>
+</html>
