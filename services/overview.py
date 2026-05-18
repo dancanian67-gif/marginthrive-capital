@@ -10,4 +10,6 @@ def overview_drilldown_links() -> dict[str, str]:
         "fraud_flagged": url_for("admin", flagged_fraud="1"),
         "pending_ops_review": url_for("admin", preset="ops_review"),
         "awaiting_client_action": url_for("admin", preset="awaiting_client"),
+        "active_loans": url_for("admin", preset="active_loans"),
+        "overdue_loans": url_for("admin", preset="overdue_loans"),
     }

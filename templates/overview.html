@@ -35,6 +35,8 @@
                         ('Fraud flagged', kpis.fraud_flagged, kpi_links.fraud_flagged),
                         ('Pending ops review', kpis.pending_ops_review, kpi_links.pending_ops_review),
                         ('Awaiting client action', kpis.awaiting_client_action, kpi_links.awaiting_client_action),
+                        ('Active loans', kpis.active_loans, kpi_links.active_loans),
+                        ('Overdue loans', kpis.overdue_loans, kpi_links.overdue_loans),
                     ] %}
                     {% for label, value, href in executive_kpis %}
                     {% include 'partials/dashboard_kpi_link.html' %}

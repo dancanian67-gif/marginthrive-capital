@@ -97,15 +97,23 @@ def init_db():
     from repositories.audit import init_workflow_history_table
     from repositories.officers import init_officers_table, seed_officers_table
     from repositories.operators import init_operators_table, seed_bootstrap_operator
+    from repositories.loans import (
+        init_loan_account_history_table,
+        init_repayments_table,
+        migrate_loan_columns,
+    )
     from repositories.underwriting import init_underwriting_decisions_table, migrate_underwriting_columns
 
     init_workflow_history_table(cursor)
     init_underwriting_decisions_table(cursor)
+    init_repayments_table(cursor)
+    init_loan_account_history_table(cursor)
     init_officers_table(cursor)
     seed_officers_table(cursor)
     init_operators_table(cursor)
     seed_bootstrap_operator(cursor)
     migrate_underwriting_columns(cursor)
+    migrate_loan_columns(cursor)
 
     conn.commit()
     conn.close()

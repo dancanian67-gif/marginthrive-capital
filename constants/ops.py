@@ -9,6 +9,8 @@ REQUIRED_DATABASE_TABLES = (
     "applications",
     "workflow_history",
     "underwriting_decisions",
+    "repayments",
+    "loan_account_history",
     "officers",
     "operators",
 )

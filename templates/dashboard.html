@@ -78,6 +78,17 @@
                                 </select>
                             </div>
                             <div class="dashboard-form-row">
+                                <label for="filter-loan-lifecycle">Loan lifecycle</label>
+                                <select id="filter-loan-lifecycle" name="loan_lifecycle_status">
+                                    <option value="">All loan states</option>
+                                    {% for status in loan_lifecycle_statuses %}
+                                    <option value="{{ status }}" {% if filters.loan_lifecycle_status == status %}selected{% endif %}>
+                                        {{ loan_lifecycle_status_labels[status] }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="dashboard-form-row">
                                 <label for="filter-fraud">Fraud flag</label>
                                 <select id="filter-fraud" name="flagged_fraud">
                                     <option value="">All</option>

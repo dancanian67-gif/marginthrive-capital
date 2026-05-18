@@ -110,6 +110,24 @@
 
                 <div class="dashboard-glass dashboard-card dashboard-report-card">
                     <header class="dashboard-report-card-header">
+                        <h2 class="dashboard-panel-title">Loan servicing</h2>
+                        <a class="dashboard-link" href="{{ export_urls.repayments }}">Export repayments</a>
+                    </header>
+                    <dl class="dashboard-meta">
+                        <div><dt>Active loans</dt><dd>{{ portfolio_kpis.active_loans }}</dd></div>
+                        <div><dt>Overdue (incl. past due)</dt><dd>{{ portfolio_kpis.overdue_loans }}</dd></div>
+                        <div><dt>Total outstanding</dt><dd>{{ portfolio_kpis.total_outstanding }}</dd></div>
+                        <div><dt>Completed loans</dt><dd>{{ portfolio_kpis.completed_loans }}</dd></div>
+                    </dl>
+                    <ul class="dashboard-report-stat-list">
+                        {% for item in portfolio_loans %}
+                        <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <div class="dashboard-glass dashboard-card dashboard-report-card">
+                    <header class="dashboard-report-card-header">
                         <h2 class="dashboard-panel-title">Fraud review</h2>
                         <a class="dashboard-link" href="{{ export_urls.fraud }}">Export CSV</a>
                     </header>

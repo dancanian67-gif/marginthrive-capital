@@ -22,6 +22,11 @@
             {{ underwriting_status_labels[app['underwriting_status']] }}
         </span>
         {% endif %}
+        {% if app['loan_lifecycle_status'] and app['loan_lifecycle_status'] != 'not_issued' %}
+        <span class="dashboard-badge {{ dashboard_loan_lifecycle_badge_class(app['loan_lifecycle_status']) }}">
+            {{ loan_lifecycle_status_labels[app['loan_lifecycle_status']] }}
+        </span>
+        {% endif %}
     </td>
     <td data-label="Fraud">
         {% if app['flagged_fraud'] %}

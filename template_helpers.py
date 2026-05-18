@@ -32,9 +32,13 @@ def register_template_globals(app) -> None:
 
     @app.template_global()
     def dashboard_table_row_class(application) -> str:
+        from services.loans import loan_collections_attention
+
         classes = []
         if application["flagged_fraud"]:
             classes.append("dashboard-table-row-fraud")
+        elif loan_collections_attention(application):
+            classes.append("dashboard-table-row-loan-delinquent")
         elif application["risk_level"] in KPI_HIGH_RISK_LEVELS:
             classes.append("dashboard-table-row-high-risk")
         elif application_needs_attention(application):
@@ -57,6 +61,29 @@ def register_template_globals(app) -> None:
         if batch.get("transition_warning"):
             classes.append("dashboard-history-batch-warning")
         return " ".join(classes)
+
+    @app.template_global()
+    def dashboard_loan_lifecycle_badge_class(status: str) -> str:
+        mapping = {
+            "active": "dashboard-badge-loan-active",
+            "repaying": "dashboard-badge-loan-repaying",
+            "overdue": "dashboard-badge-loan-overdue",
+            "completed": "dashboard-badge-status-approved",
+            "defaulted": "dashboard-badge-status-rejected",
+            "written_off": "dashboard-badge-loan-written-off",
+            "not_issued": "dashboard-badge-status-neutral",
+        }
+        return mapping.get(status, "dashboard-badge-status-neutral")
+
+    @app.template_global()
+    def dashboard_repayment_risk_badge_class(level: str) -> str:
+        mapping = {
+            "current": "dashboard-badge-status-neutral",
+            "watch": "dashboard-badge-loan-watch",
+            "elevated": "dashboard-badge-underwriting-escalated",
+            "critical": "dashboard-badge-status-rejected",
+        }
+        return mapping.get(level, "dashboard-badge-status-neutral")
 
     @app.template_global()
     def dashboard_underwriting_badge_class(status: str) -> str:
@@ -95,5 +122,14 @@ def register_template_globals(app) -> None:
             "fraud_flag_change": "Fraud flag change",
             "officer_assignment": "Officer assignment",
             "notes_update": "Notes update",
+            "loan_lifecycle_change": "Loan lifecycle status",
+            "loan_account_update": "Loan account update",
+            "loan_terms_change": "Loan terms update",
+            "loan_balance_change": "Outstanding balance",
+            "loan_progress_change": "Repayment progress",
+            "loan_collections_note": "Collections note",
+            "loan_collections_observation": "Missed payment observation",
+            "loan_repayment_risk_change": "Repayment risk level",
+            "repayment_recorded": "Repayment recorded",
         }
         return labels.get(action_type, action_type.replace("_", " ").title())

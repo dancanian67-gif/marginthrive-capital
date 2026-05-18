@@ -1,5 +1,6 @@
 from flask import url_for
 
+from constants.loans import ACTIVE_LOAN_LIFECYCLE_STATUSES, LOAN_LIFECYCLE_STATUSES
 from constants.workflow import (
     ADMIN_FILTER_PRESETS,
     ADMIN_LIST_FILTER_KEYS,
@@ -33,6 +34,10 @@ def parse_admin_list_filters(args) -> dict:
     if flagged_fraud not in {"", "0", "1"}:
         flagged_fraud = ""
 
+    loan_lifecycle_status = (args.get("loan_lifecycle_status") or "").strip()
+    if loan_lifecycle_status and loan_lifecycle_status not in LOAN_LIFECYCLE_STATUSES:
+        loan_lifecycle_status = ""
+
     assigned_officer = (args.get("assigned_officer") or "").strip()
     if len(assigned_officer) > MAX_ASSIGNED_OFFICER_LENGTH:
         assigned_officer = assigned_officer[:MAX_ASSIGNED_OFFICER_LENGTH]
@@ -55,6 +60,7 @@ def parse_admin_list_filters(args) -> dict:
         "sub_status": sub_status,
         "risk_level": risk_level,
         "flagged_fraud": flagged_fraud,
+        "loan_lifecycle_status": loan_lifecycle_status,
         "assigned_officer": assigned_officer,
         "q": search_query,
         "preset": preset,
@@ -94,6 +100,20 @@ def build_applications_where(filters: dict) -> tuple[str, list]:
         )
         params.append(KPI_OPS_REVIEW_SUB_STATUS)
         params.extend(KPI_ACTIVE_PIPELINE_STATUSES)
+    elif preset == "active_loans":
+        placeholders = ", ".join("?" * len(ACTIVE_LOAN_LIFECYCLE_STATUSES))
+        clauses.append(f"loan_lifecycle_status IN ({placeholders})")
+        params.extend(ACTIVE_LOAN_LIFECYCLE_STATUSES)
+    elif preset == "overdue_loans":
+        active_placeholders = ", ".join("?" * len(ACTIVE_LOAN_LIFECYCLE_STATUSES))
+        clauses.append(
+            f"(loan_lifecycle_status = 'overdue' OR ("
+            f"loan_lifecycle_status IN ({active_placeholders}) "
+            f"AND due_date IS NOT NULL AND TRIM(due_date) != '' "
+            f"AND date(due_date) < date('now') "
+            f"AND COALESCE(outstanding_balance, 0) > 0))"
+        )
+        params.extend(ACTIVE_LOAN_LIFECYCLE_STATUSES)
 
     if filters["status"]:
         clauses.append("status = ?")
@@ -110,6 +130,10 @@ def build_applications_where(filters: dict) -> tuple[str, list]:
     if filters["flagged_fraud"] in {"0", "1"}:
         clauses.append("flagged_fraud = ?")
         params.append(int(filters["flagged_fraud"]))
+
+    if filters.get("loan_lifecycle_status"):
+        clauses.append("loan_lifecycle_status = ?")
+        params.append(filters["loan_lifecycle_status"])
 
     if filters["assigned_officer"]:
         clauses.append("assigned_officer LIKE ?")
@@ -185,6 +209,26 @@ def active_filter_chips(filters: dict) -> list[dict]:
                 "clear_url": url_for(
                     "admin",
                     **{k: v for k, v in filters_to_query_params(filters).items() if k != "assigned_officer"},
+                ),
+            }
+        )
+    if filters.get("loan_lifecycle_status"):
+        from constants.loans import LOAN_LIFECYCLE_STATUS_LABELS
+
+        lifecycle_label = LOAN_LIFECYCLE_STATUS_LABELS.get(
+            filters["loan_lifecycle_status"],
+            filters["loan_lifecycle_status"],
+        )
+        chips.append(
+            {
+                "label": f"Loan: {lifecycle_label}",
+                "clear_url": url_for(
+                    "admin",
+                    **{
+                        k: v
+                        for k, v in filters_to_query_params(filters).items()
+                        if k != "loan_lifecycle_status"
+                    },
                 ),
             }
         )

@@ -4,7 +4,14 @@ from constants.analytics import ANALYTICS_TIME_RANGES
 from constants.reporting import (
     APPLICATION_EXPORT_COLUMNS,
     AUDIT_EXPORT_COLUMNS,
+    REPORT_EXPORT_MAX_ROWS,
     REPORT_EXPORT_TYPES,
+)
+from constants.loans import (
+    LOAN_LIFECYCLE_STATUS_LABELS,
+    LOAN_LIFECYCLE_STATUSES,
+    REPAYMENT_FREQUENCIES,
+    REPAYMENT_RISK_LEVELS,
 )
 from constants.underwriting import (
     UNDERWRITING_ASSESSMENT_FIELD_LABELS,
@@ -35,6 +42,12 @@ from repositories.applications import (
 )
 from repositories.audit import fetch_audit_history_for_export, fetch_workflow_history_rows
 from repositories.database import get_db_connection
+from repositories.loans import (
+    fetch_loan_account_history_rows,
+    fetch_loan_lifecycle_distribution,
+    fetch_repayment_rows,
+    fetch_repayments_for_export,
+)
 from repositories.underwriting import (
     fetch_underwriting_decision_history,
     fetch_underwriting_portfolio_distribution,
@@ -75,6 +88,15 @@ from services.filters import (
 )
 from services.overview import overview_drilldown_links
 from services.reporting import build_reports_page_data, report_export_urls
+from services.loans import (
+    delinquency_context,
+    group_loan_account_history,
+    loan_servicing_summary,
+    persist_loan_account_update,
+    persist_repayment,
+    validate_loan_account_form,
+    validate_repayment_form,
+)
 from services.underwriting import (
     financing_rationale_summary,
     group_underwriting_decision_history,
@@ -168,6 +190,11 @@ def admin_analytics():
     for item in underwriting_portfolio:
         item["share"] = round((item["count"] / underwriting_total) * 100, 1)
 
+    loan_lifecycle_portfolio = fetch_loan_lifecycle_distribution(cursor)
+    loan_total = sum(item["count"] for item in loan_lifecycle_portfolio) or 1
+    for item in loan_lifecycle_portfolio:
+        item["share"] = round((item["count"] / loan_total) * 100, 1)
+
     conn.close()
 
     insights = analytics_insights(period_kpis, backlog, officer_workload, pipeline_distribution)
@@ -189,6 +216,7 @@ def admin_analytics():
         backlog=backlog,
         activity_summary=activity_summary,
         underwriting_portfolio=underwriting_portfolio,
+        loan_lifecycle_portfolio=loan_lifecycle_portfolio,
         insights=insights,
         active_nav="analytics",
         page_title="Operational Analytics",
@@ -444,7 +472,10 @@ def admin():
             risk_level,
             flagged_fraud,
             assigned_officer,
-            underwriting_status
+            underwriting_status,
+            loan_lifecycle_status,
+            outstanding_balance,
+            repayment_risk_level
         FROM applications
         {where_sql}
         ORDER BY id DESC
@@ -490,6 +521,7 @@ def admin():
         statuses=APPLICATION_STATUSES,
         sub_statuses=APPLICATION_SUB_STATUSES,
         risk_levels=APPLICATION_RISK_LEVELS,
+        loan_lifecycle_statuses=LOAN_LIFECYCLE_STATUSES,
         officers=officers,
         active_nav="applications",
         page_title="Applications",
@@ -507,6 +539,8 @@ def admin_application_detail(application_id: int):
     cursor = conn.cursor()
     history_rows = fetch_workflow_history_rows(cursor, application_id)
     underwriting_rows = fetch_underwriting_decision_history(cursor, application_id)
+    loan_history_rows = fetch_loan_account_history_rows(cursor, application_id)
+    repayment_rows = fetch_repayment_rows(cursor, application_id)
     officers = fetch_registered_officers(cursor)
     conn.close()
 
@@ -534,6 +568,14 @@ def admin_application_detail(application_id: int):
         underwriting_assessment_labels=UNDERWRITING_ASSESSMENT_LABELS,
         underwriting_assessment_field_labels=UNDERWRITING_ASSESSMENT_FIELD_LABELS,
         financing_rationale=financing_rationale_summary(application),
+        loan_servicing_summary=loan_servicing_summary(application),
+        delinquency=delinquency_context(application),
+        loan_account_history=group_loan_account_history(loan_history_rows),
+        repayment_history=repayment_rows,
+        loan_lifecycle_statuses=LOAN_LIFECYCLE_STATUSES,
+        loan_lifecycle_status_labels=LOAN_LIFECYCLE_STATUS_LABELS,
+        repayment_frequencies=REPAYMENT_FREQUENCIES,
+        repayment_risk_levels=REPAYMENT_RISK_LEVELS,
         admin_actor=getattr(g, "admin_actor", get_request_actor()),
         status_transition_hint=status_transition_hint,
         export_audit_url=url_for(
@@ -594,6 +636,119 @@ def admin_application_underwriting(application_id: int):
         "success",
     )
     return redirect(url_for("admin_application_detail", application_id=application_id))
+
+
+@bp.route("/admin/applications/<int:application_id>/loan-account", methods=["POST"])
+@require_admin_auth
+def admin_application_loan_account(application_id: int):
+    if not validate_csrf(request.form.get("csrf_token", "")):
+        flash("Security check failed. Please try again.", "error")
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    application = fetch_application(application_id)
+    if application is None:
+        return Response("Application not found.", status=404)
+
+    actor = getattr(g, "admin_actor", get_request_actor())
+    snapshot, validation_error = validate_loan_account_form(request.form, application)
+    if validation_error:
+        category = "info" if validation_error.startswith("No loan account changes were") else "error"
+        flash(validation_error, category)
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    context_notes = (request.form.get("loan_account_context") or "").strip()[:1000]
+
+    try:
+        persist_loan_account_update(
+            application_id,
+            application,
+            snapshot,
+            actor,
+            context_notes=context_notes,
+        )
+    except Exception as exc:
+        log_workflow_failure(
+            "Loan account update could not be saved",
+            application_id=application_id,
+            actor=actor,
+            error=str(exc),
+        )
+        flash_operational_error()
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    status_label = LOAN_LIFECYCLE_STATUS_LABELS.get(
+        snapshot["loan_lifecycle_status"],
+        snapshot["loan_lifecycle_status"],
+    )
+    flash(
+        f"Loan account saved for application #{application_id} — lifecycle is now “{status_label}”.",
+        "success",
+    )
+    return redirect(url_for("admin_application_detail", application_id=application_id))
+
+
+@bp.route("/admin/applications/<int:application_id>/repayments", methods=["POST"])
+@require_admin_auth
+def admin_application_repayment(application_id: int):
+    if not validate_csrf(request.form.get("csrf_token", "")):
+        flash("Security check failed. Please try again.", "error")
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    application = fetch_application(application_id)
+    if application is None:
+        return Response("Application not found.", status=404)
+
+    actor = getattr(g, "admin_actor", get_request_actor())
+    repayment, validation_error = validate_repayment_form(request.form, application)
+    if validation_error:
+        flash(validation_error, "error")
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    try:
+        result = persist_repayment(application_id, application, repayment, actor)
+    except Exception as exc:
+        log_workflow_failure(
+            "Repayment could not be recorded",
+            application_id=application_id,
+            actor=actor,
+            error=str(exc),
+        )
+        flash_operational_error()
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    flash_message = (
+        f"Repayment of {repayment['payment_amount']} recorded for application #{application_id}. "
+        f"Outstanding balance is now {result['balance_after']}."
+    )
+    if result["paid_in_full"]:
+        flash_message += " Loan marked completed."
+    flash(flash_message, "success")
+    return redirect(url_for("admin_application_detail", application_id=application_id))
+
+
+@bp.route("/admin/export/repayments")
+@require_admin_auth
+def admin_export_repayments():
+    from constants.reporting import REPAYMENT_EXPORT_COLUMNS
+
+    filters = parse_admin_list_filters(request.args)
+    where_sql, where_params = build_applications_where(filters)
+    if where_sql:
+        application_clause = where_sql.replace(" WHERE ", "", 1)
+        repayment_where = f" WHERE a.id IN (SELECT id FROM applications WHERE {application_clause})"
+        repayment_params = list(where_params)
+    else:
+        repayment_where = ""
+        repayment_params = []
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    rows = fetch_repayments_for_export(cursor, repayment_where, repayment_params, REPORT_EXPORT_MAX_ROWS)
+    conn.close()
+
+    filename = "repayments_export.csv"
+    log_admin_export("repayments", filename=filename, row_count=len(rows))
+    return make_csv_response(filename, REPAYMENT_EXPORT_COLUMNS, rows)
 
 
 @bp.route("/admin/applications/<int:application_id>/workflow", methods=["POST"])

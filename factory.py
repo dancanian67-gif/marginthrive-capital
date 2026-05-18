@@ -5,6 +5,7 @@ from flask import Flask
 
 from config import configure_app
 from constants.operators import role_label
+from constants.loans import LOAN_LIFECYCLE_STATUS_LABELS, REPAYMENT_FREQUENCY_LABELS, REPAYMENT_RISK_LABELS
 from constants.underwriting import UNDERWRITING_STATUS_LABELS
 from repositories.database import init_db
 from routes import register_routes
@@ -39,6 +40,9 @@ def create_app() -> Flask:
             "current_operator": operator,
             "csrf_token": ensure_session_csrf_token(),
             "underwriting_status_labels": UNDERWRITING_STATUS_LABELS,
+            "loan_lifecycle_status_labels": LOAN_LIFECYCLE_STATUS_LABELS,
+            "repayment_frequency_labels": REPAYMENT_FREQUENCY_LABELS,
+            "repayment_risk_labels": REPAYMENT_RISK_LABELS,
         }
 
     return app

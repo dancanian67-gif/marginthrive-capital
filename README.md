@@ -73,6 +73,19 @@ Workflow changes are recorded in `workflow_history` with operator attribution, o
 
 Application review includes a dedicated **Underwriting & financing decision** panel on each application detail page. Operators record structured assessments (affordability, repayment confidence, business stability, documentation quality), financing decision status, rationale, and escalation context. Decisions are stored on the application, versioned in `underwriting_decisions`, and mirrored into the governance audit trail separately from pipeline workflow status.
 
+## Loan servicing & repayments (Phase D3)
+
+Active loan operations are tracked separately from pipeline workflow and financing decisions:
+
+- **Loan lifecycle** on each application: `not_issued` (default), `active`, `repaying`, `overdue`, `completed`, `defaulted`, `written_off`
+- **Loan account fields**: account number, issued/outstanding amounts, repayment progress, schedule (issue/due dates, installment, frequency), collections notes, repayment risk level
+- **`repayments` table**: manual payment records with balance before/after and operator attribution
+- **`loan_account_history` table**: versioned loan account snapshots (mirrors underwriting pattern)
+- **Governance**: loan lifecycle changes and repayments write to `workflow_history` with dedicated action types
+- **Visibility**: application detail servicing panel, dashboard filters/presets (`active_loans`, `overdue_loans`), overview KPIs, analytics distribution, CSV exports (applications + `/admin/export/repayments`)
+
+No payment gateways, mobile money, or customer portals — operators enter repayments manually.
+
 ## Reports & exports (Phase B3)
 
 Operational reports and CSV exports are available at `/admin/reports`, with filtered application exports from `/admin` and audit exports from application detail. See [docs/WORKFLOW_SCHEMA.md](docs/WORKFLOW_SCHEMA.md#operational-reports--exports-phase-b3).

@@ -1,0 +1,236 @@
+<div class="dashboard-glass dashboard-card dashboard-loan-card">
+    <header class="dashboard-loan-header">
+        <div>
+            <h2 class="dashboard-panel-title">Loan account &amp; repayment servicing</h2>
+            <p class="dashboard-field-hint">
+                Active loan operations are tracked separately from pipeline workflow and financing decisions.
+            </p>
+        </div>
+        <span class="dashboard-badge {{ dashboard_loan_lifecycle_badge_class(application['loan_lifecycle_status']) }}">
+            {{ loan_lifecycle_status_labels[application['loan_lifecycle_status']] }}
+        </span>
+    </header>
+
+    <div class="dashboard-insight-panel dashboard-loan-summary">
+        <p><strong>Servicing summary:</strong> {{ loan_servicing_summary }}</p>
+        {% if application['loan_account_number'] %}
+        <p class="dashboard-field-hint">Account {{ application['loan_account_number'] }}</p>
+        {% endif %}
+        {% if delinquency.show_collections_banner %}
+        <p class="dashboard-loan-delinquency-banner" role="status">
+            <strong>Collections attention:</strong>
+            {% if delinquency.delinquency_label %}{{ delinquency.delinquency_label }}.{% endif %}
+            <span class="dashboard-badge {{ dashboard_repayment_risk_badge_class(application['repayment_risk_level']) }}">
+                {{ repayment_risk_labels[application['repayment_risk_level']] }}
+            </span>
+        </p>
+        {% endif %}
+    </div>
+
+    <div class="dashboard-detail-grid dashboard-loan-metrics">
+        <div class="dashboard-glass dashboard-card dashboard-card-nested">
+            <h3 class="dashboard-panel-title">Account snapshot</h3>
+            <dl class="dashboard-meta dashboard-meta-columns">
+                <div><dt>Issued amount</dt><dd>{{ application['issued_amount'] if application['issued_amount'] is not none else '—' }}</dd></div>
+                <div><dt>Outstanding</dt><dd>{{ application['outstanding_balance'] if application['outstanding_balance'] is not none else '—' }}</dd></div>
+                <div><dt>Repayment progress</dt><dd>{% if application['loan_lifecycle_status'] != 'not_issued' %}{{ application['repayment_progress'] }}%{% else %}—{% endif %}</dd></div>
+                <div><dt>Installment</dt><dd>{{ application['installment_amount'] if application['installment_amount'] is not none else '—' }}</dd></div>
+                <div><dt>Frequency</dt><dd>{{ repayment_frequency_labels[application['repayment_frequency']] }}</dd></div>
+                <div><dt>Issue date</dt><dd>{{ application['issue_date'] or '—' }}</dd></div>
+                <div><dt>Due date</dt><dd>{{ application['due_date'] or '—' }}</dd></div>
+                <div><dt>Last payment</dt><dd>{{ application['last_payment_at'] or '—' }}</dd></div>
+            </dl>
+        </div>
+        {% if application['collections_notes'] or application['missed_payment_observations'] %}
+        <div class="dashboard-glass dashboard-card dashboard-card-nested">
+            <h3 class="dashboard-panel-title">Collections notes</h3>
+            {% if application['collections_notes'] %}
+            <p>{{ application['collections_notes'] }}</p>
+            {% endif %}
+            {% if application['missed_payment_observations'] %}
+            <p><strong>Missed payments:</strong> {{ application['missed_payment_observations'] }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    {% if repayment_history %}
+    <div class="dashboard-loan-repayment-history">
+        <h3 class="dashboard-panel-title">Repayment history</h3>
+        <div class="dashboard-table-container">
+            <table class="dashboard-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Amount</th>
+                        <th>Balance after</th>
+                        <th>Recorded by</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payment in repayment_history %}
+                    <tr>
+                        <td data-label="Date">{{ payment['payment_date'] }}</td>
+                        <td data-label="Amount">{{ payment['payment_amount'] }}</td>
+                        <td data-label="Balance after">{{ payment['balance_after'] }}</td>
+                        <td data-label="Recorded by">{{ payment['actor'] }}</td>
+                        <td data-label="Notes">{{ payment['repayment_notes'] or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if loan_account_history %}
+    <div class="dashboard-loan-account-history">
+        <h3 class="dashboard-panel-title">Loan account changes</h3>
+        <ul class="dashboard-underwriting-history-list">
+            {% for entry in loan_account_history %}
+            <li class="dashboard-underwriting-history-item{% if entry.is_critical %} dashboard-underwriting-history-critical{% endif %}">
+                <div class="dashboard-underwriting-history-meta">
+                    <strong>{{ entry.status_label }}</strong>
+                    <span>{{ entry.created_at }} · {{ entry.actor }}</span>
+                </div>
+                {% if entry.loan_account_number %}
+                <p class="dashboard-field-hint">Account {{ entry.loan_account_number }}</p>
+                {% endif %}
+                {% if entry.context_notes %}
+                <p>{{ entry.context_notes }}</p>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <form
+        class="dashboard-form dashboard-loan-form"
+        method="POST"
+        action="{{ url_for('admin_application_loan_account', application_id=application['id']) }}"
+    >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <fieldset class="dashboard-fieldset">
+            <legend>Loan account</legend>
+            <div class="dashboard-underwriting-form-grid">
+                <div class="dashboard-form-row">
+                    <label for="loan_lifecycle_status">Lifecycle status</label>
+                    <select id="loan_lifecycle_status" name="loan_lifecycle_status" required>
+                        {% for status in loan_lifecycle_statuses %}
+                        <option value="{{ status }}"{% if application['loan_lifecycle_status'] == status %} selected{% endif %}>
+                            {{ loan_lifecycle_status_labels[status] }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="dashboard-form-row">
+                    <label for="loan_account_number">Account number</label>
+                    <input
+                        type="text"
+                        id="loan_account_number"
+                        name="loan_account_number"
+                        value="{{ application['loan_account_number'] }}"
+                        maxlength="32"
+                        placeholder="Auto-generated on activation if empty"
+                    >
+                </div>
+                <div class="dashboard-form-row">
+                    <label for="repayment_risk_level">Repayment risk</label>
+                    <select id="repayment_risk_level" name="repayment_risk_level" required>
+                        {% for level in repayment_risk_levels %}
+                        <option value="{{ level }}"{% if application['repayment_risk_level'] == level %} selected{% endif %}>
+                            {{ repayment_risk_labels[level] }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="dashboard-form-row">
+                    <label for="issued_amount">Issued amount</label>
+                    <input type="number" id="issued_amount" name="issued_amount" min="0" step="0.01"
+                        value="{{ application['issued_amount'] if application['issued_amount'] is not none else '' }}">
+                </div>
+                <div class="dashboard-form-row">
+                    <label for="outstanding_balance">Outstanding balance</label>
+                    <input type="number" id="outstanding_balance" name="outstanding_balance" min="0" step="0.01"
+                        value="{{ application['outstanding_balance'] if application['outstanding_balance'] is not none else '' }}">
+                </div>
+                <div class="dashboard-form-row">
+                    <label for="installment_amount">Installment amount</label>
+                    <input type="number" id="installment_amount" name="installment_amount" min="0" step="0.01"
+                        value="{{ application['installment_amount'] if application['installment_amount'] is not none else '' }}">
+                </div>
+                <div class="dashboard-form-row">
+                    <label for="repayment_frequency">Repayment frequency</label>
+                    <select id="repayment_frequency" name="repayment_frequency">
+                        {% for frequency in repayment_frequencies %}
+                        <option value="{{ frequency }}"{% if application['repayment_frequency'] == frequency %} selected{% endif %}>
+                            {{ repayment_frequency_labels[frequency] }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="dashboard-form-row">
+                    <label for="issue_date">Issue date</label>
+                    <input type="date" id="issue_date" name="issue_date" value="{{ application['issue_date'] or '' }}">
+                </div>
+                <div class="dashboard-form-row">
+                    <label for="due_date">Due date</label>
+                    <input type="date" id="due_date" name="due_date" value="{{ application['due_date'] or '' }}">
+                </div>
+            </div>
+            <div class="dashboard-form-row">
+                <label for="collections_notes">Collections notes</label>
+                <textarea id="collections_notes" name="collections_notes" rows="4" maxlength="5000"
+                    placeholder="Collections outreach, promises to pay, hardship context">{{ application['collections_notes'] }}</textarea>
+            </div>
+            <div class="dashboard-form-row">
+                <label for="missed_payment_observations">Missed payment observations</label>
+                <textarea id="missed_payment_observations" name="missed_payment_observations" rows="3" maxlength="2000"
+                    placeholder="Missed installments, contact attempts, delinquency context">{{ application['missed_payment_observations'] }}</textarea>
+            </div>
+            <div class="dashboard-form-row">
+                <label for="loan_account_context">Governance note</label>
+                <textarea id="loan_account_context" name="loan_account_context" rows="2" maxlength="1000"
+                    placeholder="Optional context recorded in the audit trail"></textarea>
+            </div>
+        </fieldset>
+
+        <div class="dashboard-form-actions">
+            <button type="submit" class="dashboard-btn-primary">Save loan account</button>
+        </div>
+    </form>
+
+    {% if application['loan_lifecycle_status'] in ['active', 'repaying', 'overdue', 'defaulted'] %}
+    <form
+        class="dashboard-form dashboard-loan-repayment-form"
+        method="POST"
+        action="{{ url_for('admin_application_repayment', application_id=application['id']) }}"
+    >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <fieldset class="dashboard-fieldset">
+            <legend>Record repayment</legend>
+            <div class="dashboard-underwriting-form-grid">
+                <div class="dashboard-form-row">
+                    <label for="payment_date">Payment date</label>
+                    <input type="date" id="payment_date" name="payment_date" value="">
+                </div>
+                <div class="dashboard-form-row">
+                    <label for="payment_amount">Payment amount</label>
+                    <input type="number" id="payment_amount" name="payment_amount" min="0.01" step="0.01" required>
+                </div>
+            </div>
+            <div class="dashboard-form-row">
+                <label for="repayment_notes">Repayment notes</label>
+                <textarea id="repayment_notes" name="repayment_notes" rows="2" maxlength="2000"
+                    placeholder="Reference, channel, or servicing context"></textarea>
+            </div>
+        </fieldset>
+        <div class="dashboard-form-actions">
+            <button type="submit" class="dashboard-btn-secondary">Record repayment</button>
+        </div>
+    </form>
+    {% endif %}
+</div>

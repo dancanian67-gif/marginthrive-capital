@@ -176,15 +176,31 @@
                     </div>
 
                     <div class="dashboard-glass dashboard-card dashboard-analytics-container">
-                    <div class="dashboard-glass dashboard-card dashboard-analytics-container">
                         <h3 class="dashboard-panel-title">Financing decisions (portfolio)</h3>
-                                                <div class="dashboard-chart-frame dashboard-chart-frame-list">
+                        <div class="dashboard-chart-frame dashboard-chart-frame-list">
                             {% with items=underwriting_portfolio, empty_message='No underwriting decisions recorded yet.' %}
                             {% include 'partials/dashboard_distribution_chart.html' %}
                             {% endwith %}
                         </div>
                     </div>
 
+                    <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+                        <h3 class="dashboard-panel-title">Loan lifecycle (portfolio)</h3>
+                        <div class="dashboard-chart-frame dashboard-chart-frame-list">
+                            {% with items=loan_lifecycle_portfolio, empty_message='No loan accounts issued yet.' %}
+                            {% include 'partials/dashboard_distribution_chart.html' %}
+                            {% endwith %}
+                        </div>
+                        <p class="dashboard-overview-footnote">
+                            <a class="dashboard-link" href="{{ url_for('admin', preset='active_loans') }}">Active loans →</a>
+                            ·
+                            <a class="dashboard-link" href="{{ url_for('admin', preset='overdue_loans') }}">Overdue →</a>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="dashboard-overview-grid">
+                    <div class="dashboard-glass dashboard-card dashboard-analytics-container">
                         <h3 class="dashboard-panel-title">Active pipeline stages</h3>
                         <div class="dashboard-chart-frame dashboard-chart-frame-list">
                             {% with items=pipeline_distribution, empty_message='No active pipeline cases in this period.' %}

@@ -31,8 +31,33 @@ APPLICATION_EXPORT_COLUMNS = (
     ("decision_reason", "decision_reason"),
     ("reviewed_by", "reviewed_by"),
     ("reviewed_at", "reviewed_at"),
+    ("loan_lifecycle_status", "loan_lifecycle_status"),
+    ("loan_account_number", "loan_account_number"),
+    ("issued_amount", "issued_amount"),
+    ("outstanding_balance", "outstanding_balance"),
+    ("repayment_progress", "repayment_progress"),
+    ("issue_date", "issue_date"),
+    ("due_date", "due_date"),
+    ("installment_amount", "installment_amount"),
+    ("repayment_frequency", "repayment_frequency"),
+    ("repayment_risk_level", "repayment_risk_level"),
+    ("last_payment_at", "last_payment_at"),
     ("created_at", "created_at"),
     ("updated_at", "updated_at"),
+)
+
+REPAYMENT_EXPORT_COLUMNS = (
+    ("id", "id"),
+    ("application_id", "application_id"),
+    ("business_name", "business_name"),
+    ("loan_account_number", "loan_account_number"),
+    ("payment_date", "payment_date"),
+    ("payment_amount", "payment_amount"),
+    ("balance_before", "balance_before"),
+    ("balance_after", "balance_after"),
+    ("repayment_notes", "repayment_notes"),
+    ("actor", "actor"),
+    ("created_at", "created_at"),
 )
 
 AUDIT_EXPORT_COLUMNS = (

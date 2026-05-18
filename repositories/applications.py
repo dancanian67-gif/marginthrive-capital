@@ -12,6 +12,8 @@ from constants.workflow import (
     OVERVIEW_OFFICER_LIMIT,
 )
 from repositories.database import get_db_connection
+from repositories.loans import fetch_loan_portfolio_kpis
+
 
 def fetch_executive_kpis(cursor) -> dict:
     pipeline_placeholders = ", ".join("?" * len(KPI_ACTIVE_PIPELINE_STATUSES))
@@ -55,7 +57,7 @@ def fetch_executive_kpis(cursor) -> dict:
         ),
     )
     row = cursor.fetchone()
-    return {
+    kpis = {
         "total_applications": row["total_applications"] or 0,
         "active_pipeline": row["active_pipeline"] or 0,
         "approved": row["approved"] or 0,
@@ -65,6 +67,8 @@ def fetch_executive_kpis(cursor) -> dict:
         "pending_ops_review": row["pending_ops_review"] or 0,
         "awaiting_client_action": row["awaiting_client_action"] or 0,
     }
+    kpis.update(fetch_loan_portfolio_kpis(cursor))
+    return kpis
 
 
 def fetch_application_kpis(cursor) -> dict:
@@ -237,6 +241,16 @@ def fetch_applications_for_export(
             decision_summary,
             reviewed_by,
             reviewed_at,
+            loan_lifecycle_status,
+            loan_account_number,
+            issued_amount,
+            outstanding_balance,
+            repayment_progress,
+            issue_date,
+            due_date,
+            repayment_frequency,
+            repayment_risk_level,
+            last_payment_at,
             created_at,
             updated_at
         FROM applications

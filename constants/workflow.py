@@ -46,6 +46,8 @@ ADMIN_FILTER_PRESETS = {
     "high_risk": "High-risk applications",
     "awaiting_client": "Awaiting client action",
     "ops_review": "Pending operational review",
+    "active_loans": "Active loan accounts",
+    "overdue_loans": "Overdue loan accounts",
 }
 
 ADMIN_PAGE_SIZE = 15
@@ -71,6 +73,7 @@ ADMIN_LIST_FILTER_KEYS = (
     "risk_level",
     "flagged_fraud",
     "assigned_officer",
+    "loan_lifecycle_status",
     "q",
     "preset",
 )

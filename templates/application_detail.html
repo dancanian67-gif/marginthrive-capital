@@ -99,6 +99,8 @@
 
                 {% include 'partials/dashboard_underwriting_panel.html' %}
 
+                {% include 'partials/dashboard_loan_servicing_panel.html' %}
+
                 {% include 'partials/dashboard_workflow_timeline.html' %}
 
                 <div class="dashboard-glass dashboard-card dashboard-governance-card">
@@ -108,6 +110,7 @@
                         <li>Fraud flag, critical risk, and certain quick actions require documented context.</li>
                         <li>Skipped pipeline stages are allowed but recorded with a governance notice in the audit trail.</li>
                         <li>Financing decisions are recorded separately from pipeline workflow progression in the underwriting section and audit trail.</li>
+                        <li>Loan servicing, repayments, and collections notes are recorded separately from workflow and underwriting in the loan account section.</li>
                         {% if status_transition_hint and next_pipeline_status %}
                         <li class="dashboard-governance-warning">Advancing may trigger: {{ status_transition_hint }}</li>
                         {% endif %}
