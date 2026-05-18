@@ -59,10 +59,31 @@ def register_template_globals(app) -> None:
         return " ".join(classes)
 
     @app.template_global()
+    def dashboard_underwriting_badge_class(status: str) -> str:
+        mapping = {
+            "approved": "dashboard-badge-status-approved",
+            "conditionally_approved": "dashboard-badge-underwriting-conditional",
+            "rejected": "dashboard-badge-status-rejected",
+            "escalated_review": "dashboard-badge-underwriting-escalated",
+            "pending_clarification": "dashboard-badge-underwriting-clarification",
+            "in_review": "dashboard-badge-underwriting-review",
+            "pending_review": "dashboard-badge-status-pending",
+        }
+        return mapping.get(status, "dashboard-badge-status-neutral")
+
+    @app.template_global()
     def dashboard_history_action_label(action_type: str) -> str:
         labels = {
             "application_created": "Application created",
             "workflow_update": "Workflow update",
+            "underwriting_update": "Underwriting review",
+            "underwriting_status_change": "Financing decision status",
+            "underwriting_assessment_change": "Underwriting assessment",
+            "underwriting_observation_change": "Underwriting observation",
+            "underwriting_decision_change": "Financing decision detail",
+            "underwriting_escalation_change": "Underwriting escalation",
+            "underwriting_notes_change": "Underwriting notes",
+            "underwriting_review_attribution": "Underwriting reviewer",
             "quick_action_advance": "Quick action: advance status",
             "quick_action_margin_to_act": "Quick action: Margin to act",
             "quick_action_clear_sub_status": "Quick action: clear sub-status",

@@ -1,0 +1,150 @@
+<div class="dashboard-glass dashboard-card dashboard-underwriting-card">
+    <header class="dashboard-underwriting-header">
+        
+        <div>
+            <h2 class="dashboard-panel-title">Underwriting &amp; financing decision</h2>
+            <p class="dashboard-field-hint">
+                Pipeline workflow and financing decisions are tracked separately for operational clarity.
+            </p>
+        </div>
+        <span class="dashboard-badge {{ dashboard_underwriting_badge_class(application['underwriting_status']) }}">
+            {{ underwriting_status_labels[application['underwriting_status']] }}
+        </span>
+    </header>
+
+    <div class="dashboard-insight-panel dashboard-underwriting-rationale">
+        <p><strong>Financing rationale:</strong> {{ financing_rationale }}</p>
+        {% if application['reviewed_by'] %}
+        <p class="dashboard-field-hint">
+            Last reviewed by {{ application['reviewed_by'] }}
+            {% if application['reviewed_at'] %} at {{ application['reviewed_at'] }}{% endif %}
+        </p>
+        {% endif %}
+    </div>
+
+    <div class="dashboard-detail-grid dashboard-underwriting-assessments">
+        <div class="dashboard-glass dashboard-card dashboard-card-nested">
+            <h3 class="dashboard-panel-title">Assessment dimensions</h3>
+            <dl class="dashboard-meta dashboard-meta-columns">
+                <div><dt>Affordability</dt><dd>{{ underwriting_assessment_labels[application['affordability_assessment']] }}</dd></div>
+                
+                <div><dt>Repayment confidence</dt><dd>{{ underwriting_assessment_labels[application['repayment_confidence']] }}</dd></div>
+                <div><dt>Business stability</dt><dd>{{ underwriting_assessment_labels[application['business_stability_review']] }}</dd></div>
+                <div><dt>Documentation quality</dt><dd>{{ underwriting_assessment_labels[application['documentation_quality_review']] }}</dd></div>
+            </dl>
+        </div>
+        {% if application['operational_risk_observations'] or application['fraud_concern_observations'] %}
+        <div class="dashboard-glass dashboard-card dashboard-card-nested">
+            <h3 class="dashboard-panel-title">Risk observations</h3>
+            {% if application['operational_risk_observations'] %}
+            <p><strong>Operational:</strong> {{ application['operational_risk_observations'] }}</p>
+            {% endif %}
+            {% if application['fraud_concern_observations'] %}
+            <p><strong>Fraud concerns:</strong> {{ application['fraud_concern_observations'] }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    {% if underwriting_history %}
+    <div class="dashboard-underwriting-history">
+        <h3 class="dashboard-panel-title">Decision history</h3>
+        <ul class="dashboard-underwriting-history-list">
+            {% for entry in underwriting_history %}
+            <li class="dashboard-underwriting-history-item{% if entry.is_critical %} dashboard-underwriting-history-critical{% endif %}">
+                <div class="dashboard-underwriting-history-meta">
+                    <strong>{{ entry.status_label }}</strong>
+                    <span>{{ entry.created_at }} · {{ entry.actor }}</span>
+                </div>
+                {% if entry.decision_summary %}
+                <p>{{ entry.decision_summary }}</p>
+                {% endif %}
+                {% if entry.decision_reason %}
+                <p class="dashboard-field-hint">{{ entry.decision_reason }}</p>
+                {% endif %}
+                {% if entry.escalation_reason %}
+                <p class="dashboard-field-hint"><strong>Escalation:</strong> {{ entry.escalation_reason }}</p>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <form
+        class="dashboard-form dashboard-underwriting-form"
+        method="POST"
+        action="{{ url_for('admin_application_underwriting', application_id=application['id']) }}"
+    >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+        <fieldset class="dashboard-fieldset">
+            <legend>Financing decision</legend>
+            <div class="dashboard-form-row">
+                <label for="underwriting_status">Decision status</label>
+                <select id="underwriting_status" name="underwriting_status" required>
+                    {% for status in underwriting_statuses %}
+                    <option value="{{ status }}"{% if application['underwriting_status'] == status %} selected{% endif %}>
+                        {{ underwriting_status_labels[status] }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="dashboard-form-row">
+                <label for="decision_summary">Decision summary</label>
+                <textarea id="decision_summary" name="decision_summary" rows="2" maxlength="2000" placeholder="Headline financing outcome for operators">{{ application['decision_summary'] }}</textarea>
+            </div>
+            <div class="dashboard-form-row">
+                <label for="decision_reason">Decision reason</label>
+                <textarea id="decision_reason" name="decision_reason" rows="3" maxlength="2000" placeholder="Operational rationale supporting the decision">{{ application['decision_reason'] }}</textarea>
+            </div>
+            <div class="dashboard-form-row">
+                <label for="escalation_reason">Escalation reason</label>
+                <textarea id="escalation_reason" name="escalation_reason" rows="2" maxlength="2000" placeholder="Required when escalating for senior review">{{ application['escalation_reason'] }}</textarea>
+            </div>
+        </fieldset>
+
+        <fieldset class="dashboard-fieldset">
+            <legend>Structured assessments</legend>
+            <div class="dashboard-underwriting-form-grid">
+                {% for field_name, field_label in underwriting_assessment_field_labels.items() %}
+                <div class="dashboard-form-row">
+                    <label for="{{ field_name }}">{{ field_label }}</label>
+                    <select id="{{ field_name }}" name="{{ field_name }}" required>
+                        {% for rating in underwriting_assessment_ratings %}
+                        <option value="{{ rating }}"{% if application[field_name] == rating %} selected{% endif %}>
+                            {{ underwriting_assessment_labels[rating] }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endfor %}
+            </div>
+        </fieldset>
+
+        <fieldset class="dashboard-fieldset">
+            <legend>Observations &amp; notes</legend>
+            <div class="dashboard-form-row">
+                <label for="operational_risk_observations">Operational risk observations</label>
+                <textarea id="operational_risk_observations" name="operational_risk_observations" rows="3" maxlength="2000">{{ application['operational_risk_observations'] }}</textarea>
+            </div>
+            
+            <div class="dashboard-form-row">
+                <label for="fraud_concern_observations">Fraud concern observations</label>
+                <textarea id="fraud_concern_observations" name="fraud_concern_observations" rows="3" maxlength="2000">{{ application['fraud_concern_observations'] }}</textarea>
+            </div>
+            <div class="dashboard-form-row">
+                <label for="underwriting_notes">Manual underwriting notes</label>
+                <textarea id="underwriting_notes" name="underwriting_notes" rows="5" maxlength="5000" placeholder="Detailed underwriting narrative">{{ application['underwriting_notes'] }}</textarea>
+            </div>
+            <div class="dashboard-form-row">
+                <label for="underwriting_context">Governance note</label>
+                <textarea id="underwriting_context" name="underwriting_context" rows="2" maxlength="1000" placeholder="Optional context recorded in the audit trail"></textarea>
+            </div>
+        </fieldset>
+
+        <div class="dashboard-form-actions">
+            <button type="submit" class="dashboard-btn-primary">Save underwriting review</button>
+        </div>
+    </form>
+</div>

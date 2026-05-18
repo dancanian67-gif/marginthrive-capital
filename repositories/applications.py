@@ -233,6 +233,10 @@ def fetch_applications_for_export(
             risk_level,
             flagged_fraud,
             assigned_officer,
+            underwriting_status,
+            decision_summary,
+            reviewed_by,
+            reviewed_at,
             created_at,
             updated_at
         FROM applications

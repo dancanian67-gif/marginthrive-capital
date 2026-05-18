@@ -99,6 +99,17 @@
 
                 <div class="dashboard-glass dashboard-card dashboard-report-card">
                     <header class="dashboard-report-card-header">
+                        <h2 class="dashboard-panel-title">Financing decisions</h2>
+                    </header>
+                    <ul class="dashboard-report-stat-list">
+                        {% for item in portfolio_underwriting %}
+                        <li><span>{{ item.label }}</span><strong>{{ item.count }}</strong></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <div class="dashboard-glass dashboard-card dashboard-report-card">
+                    <header class="dashboard-report-card-header">
                         <h2 class="dashboard-panel-title">Fraud review</h2>
                         <a class="dashboard-link" href="{{ export_urls.fraud }}">Export CSV</a>
                     </header>

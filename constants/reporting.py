@@ -26,6 +26,11 @@ APPLICATION_EXPORT_COLUMNS = (
     ("risk_level", "risk_level"),
     ("flagged_fraud", "flagged_fraud"),
     ("assigned_officer", "assigned_officer"),
+    ("underwriting_status", "underwriting_status"),
+    ("decision_summary", "decision_summary"),
+    ("decision_reason", "decision_reason"),
+    ("reviewed_by", "reviewed_by"),
+    ("reviewed_at", "reviewed_at"),
     ("created_at", "created_at"),
     ("updated_at", "updated_at"),
 )

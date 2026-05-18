@@ -6,6 +6,13 @@ from constants.reporting import (
     AUDIT_EXPORT_COLUMNS,
     REPORT_EXPORT_TYPES,
 )
+from constants.underwriting import (
+    UNDERWRITING_ASSESSMENT_FIELD_LABELS,
+    UNDERWRITING_ASSESSMENT_LABELS,
+    UNDERWRITING_ASSESSMENT_RATINGS,
+    UNDERWRITING_STATUS_LABELS,
+    UNDERWRITING_STATUSES,
+)
 from constants.workflow import (
     ADMIN_FILTER_PRESETS,
     ADMIN_PAGE_SIZE,
@@ -28,6 +35,10 @@ from repositories.applications import (
 )
 from repositories.audit import fetch_audit_history_for_export, fetch_workflow_history_rows
 from repositories.database import get_db_connection
+from repositories.underwriting import (
+    fetch_underwriting_decision_history,
+    fetch_underwriting_portfolio_distribution,
+)
 from repositories.officers import (
     fetch_distinct_officers,
     fetch_registered_officers,
@@ -64,6 +75,12 @@ from services.filters import (
 )
 from services.overview import overview_drilldown_links
 from services.reporting import build_reports_page_data, report_export_urls
+from services.underwriting import (
+    financing_rationale_summary,
+    group_underwriting_decision_history,
+    persist_underwriting_update,
+    validate_underwriting_form,
+)
 from services.workflow import (
     apply_workflow_quick_action,
     application_needs_attention,
@@ -146,6 +163,10 @@ def admin_analytics():
     officer_workload = fetch_analytics_officer_workload(cursor, range_key)
     backlog = fetch_analytics_backlog_snapshot(cursor)
     activity_summary = fetch_analytics_activity_summary(cursor, range_key)
+    underwriting_portfolio = fetch_underwriting_portfolio_distribution(cursor)
+    underwriting_total = sum(item["count"] for item in underwriting_portfolio) or 1
+    for item in underwriting_portfolio:
+        item["share"] = round((item["count"] / underwriting_total) * 100, 1)
 
     conn.close()
 
@@ -167,6 +188,7 @@ def admin_analytics():
         officer_workload=officer_workload,
         backlog=backlog,
         activity_summary=activity_summary,
+        underwriting_portfolio=underwriting_portfolio,
         insights=insights,
         active_nav="analytics",
         page_title="Operational Analytics",
@@ -421,7 +443,8 @@ def admin():
             sub_status,
             risk_level,
             flagged_fraud,
-            assigned_officer
+            assigned_officer,
+            underwriting_status
         FROM applications
         {where_sql}
         ORDER BY id DESC
@@ -483,6 +506,7 @@ def admin_application_detail(application_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
     history_rows = fetch_workflow_history_rows(cursor, application_id)
+    underwriting_rows = fetch_underwriting_decision_history(cursor, application_id)
     officers = fetch_registered_officers(cursor)
     conn.close()
 
@@ -503,6 +527,13 @@ def admin_application_detail(application_id: int):
         next_pipeline_status=next_status,
         needs_attention=application_needs_attention(application),
         timeline_batches=group_workflow_history_batches(history_rows),
+        underwriting_history=group_underwriting_decision_history(underwriting_rows),
+        underwriting_statuses=UNDERWRITING_STATUSES,
+        underwriting_status_labels=UNDERWRITING_STATUS_LABELS,
+        underwriting_assessment_ratings=UNDERWRITING_ASSESSMENT_RATINGS,
+        underwriting_assessment_labels=UNDERWRITING_ASSESSMENT_LABELS,
+        underwriting_assessment_field_labels=UNDERWRITING_ASSESSMENT_FIELD_LABELS,
+        financing_rationale=financing_rationale_summary(application),
         admin_actor=getattr(g, "admin_actor", get_request_actor()),
         status_transition_hint=status_transition_hint,
         export_audit_url=url_for(
@@ -514,6 +545,55 @@ def admin_application_detail(application_id: int):
         page_title=f"Application #{application_id}",
         list_return_url=safe_return_url(request.args.get("return")),
     )
+
+
+@bp.route("/admin/applications/<int:application_id>/underwriting", methods=["POST"])
+@require_admin_auth
+def admin_application_underwriting(application_id: int):
+    if not validate_csrf(request.form.get("csrf_token", "")):
+        flash("Security check failed. Please try again.", "error")
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    application = fetch_application(application_id)
+    if application is None:
+        return Response("Application not found.", status=404)
+
+    actor = getattr(g, "admin_actor", get_request_actor())
+    form_payload = request.form.to_dict()
+    form_payload["reviewed_by"] = actor
+
+    snapshot, validation_error = validate_underwriting_form(form_payload, application)
+    if validation_error:
+        category = "info" if validation_error.startswith("No underwriting changes") else "error"
+        flash(validation_error, category)
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    context_notes = (request.form.get("underwriting_context") or "").strip()[:1000]
+
+    try:
+        persist_underwriting_update(
+            application_id,
+            application,
+            snapshot,
+            actor,
+            context_notes=context_notes,
+        )
+    except Exception as exc:
+        log_workflow_failure(
+            "Underwriting update could not be saved",
+            application_id=application_id,
+            actor=actor,
+            error=str(exc),
+        )
+        flash_operational_error()
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    status_label = UNDERWRITING_STATUS_LABELS.get(snapshot["underwriting_status"], snapshot["underwriting_status"])
+    flash(
+        f"Underwriting review saved for application #{application_id} — financing decision is now “{status_label}”.",
+        "success",
+    )
+    return redirect(url_for("admin_application_detail", application_id=application_id))
 
 
 @bp.route("/admin/applications/<int:application_id>/workflow", methods=["POST"])

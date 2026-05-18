@@ -69,6 +69,10 @@ Applications support operational fields (`status`, `sub_status`, timestamps, ris
 
 Workflow changes are recorded in `workflow_history` with operator attribution, optional governance notes, and a timeline on each application detail page. See [docs/WORKFLOW_SCHEMA.md](docs/WORKFLOW_SCHEMA.md#operational-audit-trail-phase-b2).
 
+## Underwriting & financing decisions (Phase D2)
+
+Application review includes a dedicated **Underwriting & financing decision** panel on each application detail page. Operators record structured assessments (affordability, repayment confidence, business stability, documentation quality), financing decision status, rationale, and escalation context. Decisions are stored on the application, versioned in `underwriting_decisions`, and mirrored into the governance audit trail separately from pipeline workflow status.
+
 ## Reports & exports (Phase B3)
 
 Operational reports and CSV exports are available at `/admin/reports`, with filtered application exports from `/admin` and audit exports from application detail. See [docs/WORKFLOW_SCHEMA.md](docs/WORKFLOW_SCHEMA.md#operational-reports--exports-phase-b3).

@@ -8,6 +8,7 @@ MIN_PRODUCTION_SECRET_KEY_LENGTH = 32
 REQUIRED_DATABASE_TABLES = (
     "applications",
     "workflow_history",
+    "underwriting_decisions",
     "officers",
     "operators",
 )

@@ -17,6 +17,11 @@
         <span class="dashboard-badge {{ dashboard_risk_badge_class(app['risk_level']) }}">
             {{ app['risk_level'] }}
         </span>
+        {% if app['underwriting_status'] %}
+        <span class="dashboard-badge {{ dashboard_underwriting_badge_class(app['underwriting_status']) }}">
+            {{ underwriting_status_labels[app['underwriting_status']] }}
+        </span>
+        {% endif %}
     </td>
     <td data-label="Fraud">
         {% if app['flagged_fraud'] %}

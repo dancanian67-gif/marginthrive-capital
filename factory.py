@@ -5,6 +5,7 @@ from flask import Flask
 
 from config import configure_app
 from constants.operators import role_label
+from constants.underwriting import UNDERWRITING_STATUS_LABELS
 from repositories.database import init_db
 from routes import register_routes
 from template_helpers import register_template_globals
@@ -37,6 +38,7 @@ def create_app() -> Flask:
         return {
             "current_operator": operator,
             "csrf_token": ensure_session_csrf_token(),
+            "underwriting_status_labels": UNDERWRITING_STATUS_LABELS,
         }
 
     return app

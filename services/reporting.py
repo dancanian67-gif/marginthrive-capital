@@ -8,6 +8,7 @@ from repositories.applications import (
     fetch_risk_distribution,
     fetch_status_distribution,
 )
+from repositories.underwriting import fetch_underwriting_portfolio_distribution
 from repositories.audit import fetch_governance_audit_summary
 from services.analytics import (
     fetch_analytics_activity_summary,
@@ -70,6 +71,7 @@ def build_reports_page_data(cursor, range_key: str) -> dict:
 
     portfolio_status = fetch_status_distribution(cursor)
     portfolio_risk = fetch_risk_distribution(cursor)
+    portfolio_underwriting = fetch_underwriting_portfolio_distribution(cursor)
     total_portfolio = portfolio_kpis["total_applications"] or 1
     for item in portfolio_status:
         item["share"] = round((item["count"] / total_portfolio) * 100, 1)
@@ -109,6 +111,7 @@ def build_reports_page_data(cursor, range_key: str) -> dict:
         "pipeline_distribution": pipeline_distribution,
         "portfolio_status": portfolio_status,
         "portfolio_risk": portfolio_risk,
+        "portfolio_underwriting": portfolio_underwriting,
         "officer_workload": officer_workload,
         "backlog": backlog,
         "activity_summary": activity_summary,
