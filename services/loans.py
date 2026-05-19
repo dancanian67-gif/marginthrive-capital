@@ -208,10 +208,20 @@ def validate_loan_account_form(
     return snapshot, None
 
 
+def _application_value(application: sqlite3.Row | dict, key: str, default=None):
+    if hasattr(application, "keys") and key not in application.keys():
+        return default
+    try:
+        value = application[key]
+    except (KeyError, TypeError):
+        return default
+    return default if value is None else value
+
+
 def delinquency_context(application: sqlite3.Row | dict) -> dict:
-    lifecycle = application["loan_lifecycle_status"] or DEFAULT_LOAN_LIFECYCLE_STATUS
-    outstanding = application["outstanding_balance"]
-    due_date_raw = (application["due_date"] or "").strip()
+    lifecycle = _application_value(application, "loan_lifecycle_status", DEFAULT_LOAN_LIFECYCLE_STATUS)
+    outstanding = _application_value(application, "outstanding_balance")
+    due_date_raw = (_application_value(application, "due_date", "") or "").strip()
 
     if lifecycle in TERMINAL_LOAN_LIFECYCLE_STATUSES or lifecycle == DEFAULT_LOAN_LIFECYCLE_STATUS:
         return {
@@ -262,9 +272,11 @@ def loan_servicing_summary(application: sqlite3.Row | dict) -> str:
 
 
 def loan_collections_attention(application: sqlite3.Row | dict) -> bool:
+    if hasattr(application, "keys") and "loan_lifecycle_status" not in application.keys():
+        return False
     delinquency = delinquency_context(application)
-    risk = application["repayment_risk_level"] or "current"
-    lifecycle = application["loan_lifecycle_status"] or DEFAULT_LOAN_LIFECYCLE_STATUS
+    risk = _application_value(application, "repayment_risk_level", "current") or "current"
+    lifecycle = _application_value(application, "loan_lifecycle_status", DEFAULT_LOAN_LIFECYCLE_STATUS)
     return delinquency["show_collections_banner"] or risk in {"elevated", "critical"} or lifecycle == "defaulted"
 
 

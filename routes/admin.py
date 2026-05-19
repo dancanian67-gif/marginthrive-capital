@@ -475,6 +475,7 @@ def admin():
             underwriting_status,
             loan_lifecycle_status,
             outstanding_balance,
+            due_date,
             repayment_risk_level
         FROM applications
         {where_sql}
