@@ -26,6 +26,7 @@
                 {% include 'partials/dashboard_time_range.html' %}
 
                 {% set export_links = [
+                    ('Portfolio intelligence', export_urls.portfolio),
                     ('Operational report pack', export_urls.operational),
                     ('Audit history', export_urls.audit),
                     ('Officer workload', export_urls.officers),
@@ -79,6 +80,8 @@
                 </div>
                 {% endif %}
             </section>
+
+            {% include 'partials/dashboard_portfolio_intelligence.html' %}
 
             <section class="dashboard-section">
                 <header class="dashboard-section-header">

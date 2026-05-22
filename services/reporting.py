@@ -19,6 +19,10 @@ from services.analytics import (
     fetch_analytics_period_kpis,
     fetch_analytics_pipeline_distribution,
 )
+from services.portfolio_intelligence import (
+    build_portfolio_intelligence_package,
+    portfolio_export_metric_rows,
+)
 
 
 def report_executive_summary(
@@ -97,6 +101,8 @@ def build_reports_page_data(cursor, range_key: str) -> dict:
     else:
         outcome_summary["period_rejection_rate"] = 0.0
 
+    portfolio_intelligence = build_portfolio_intelligence_package(cursor, range_key)
+
     executive_lines = report_executive_summary(
         portfolio_kpis,
         period_kpis,
@@ -104,6 +110,8 @@ def build_reports_page_data(cursor, range_key: str) -> dict:
         governance,
         ANALYTICS_TIME_RANGES[range_key],
     )
+    executive_lines.extend(portfolio_intelligence["insights"][:3])
+    executive_lines = executive_lines[:8]
 
     return {
         "portfolio_kpis": portfolio_kpis,
@@ -122,6 +130,7 @@ def build_reports_page_data(cursor, range_key: str) -> dict:
         "fraud_summary": fraud_summary,
         "outcome_summary": outcome_summary,
         "executive_lines": executive_lines,
+        "portfolio_intelligence": portfolio_intelligence,
     }
 
 
@@ -140,4 +149,5 @@ def report_export_urls(range_key: str, filter_query: dict | None = None) -> dict
         "applications_filtered": url_for("admin_export_applications", **filter_params),
         "applications_all": url_for("admin_export_applications", **range_params),
         "repayments": url_for("admin_export_repayments", **filter_params),
+        "portfolio": url_for("admin_export_report", report_type="portfolio", **range_params),
     }

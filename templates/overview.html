@@ -14,7 +14,7 @@
             <section class="dashboard-section">
                 <header class="dashboard-section-header">
                     <h1 class="dashboard-title">Operations Overview</h1>
-                    <p class="dashboard-subtitle">Executive visibility across the financing portfolio</p>
+                    <p class="dashboard-subtitle">Operational queues and executive portfolio intelligence</p>
                 </header>
 
                 {% include 'partials/dashboard_flash.html' %}
@@ -43,6 +43,8 @@
                     {% endfor %}
                 </div>
             </section>
+
+            {% include 'partials/dashboard_portfolio_intelligence.html' %}
 
             <section class="dashboard-section">
                 <header class="dashboard-section-header">

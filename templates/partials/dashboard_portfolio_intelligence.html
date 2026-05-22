@@ -1,0 +1,149 @@
+<section class="dashboard-section dashboard-portfolio-section">
+    <header class="dashboard-section-header">
+        <h2 class="dashboard-title">Portfolio intelligence</h2>
+        <p class="dashboard-subtitle">
+            Financial performance and repayment health
+            {% if range_label %}· <strong>{{ range_label }}</strong> for period metrics{% endif %}
+        </p>
+    </header>
+
+    <div class="dashboard-kpi-grid dashboard-kpi-grid-portfolio">
+        <div class="dashboard-glass dashboard-card dashboard-kpi-card dashboard-kpi-card-financial">
+            <p class="dashboard-kpi-label">Active portfolio value</p>
+            <p class="dashboard-kpi-value">{{ portfolio.financial.active_portfolio_value }}</p>
+        </div>
+        <div class="dashboard-glass dashboard-card dashboard-kpi-card dashboard-kpi-card-financial">
+            <p class="dashboard-kpi-label">Outstanding balances</p>
+            <p class="dashboard-kpi-value">{{ portfolio.financial.total_outstanding }}</p>
+        </div>
+        <div class="dashboard-glass dashboard-card dashboard-kpi-card dashboard-kpi-card-financial">
+            <p class="dashboard-kpi-label">Issued capital</p>
+            <p class="dashboard-kpi-value">{{ portfolio.financial.total_issued_capital }}</p>
+        </div>
+        <div class="dashboard-glass dashboard-card dashboard-kpi-card dashboard-kpi-card-financial">
+            <p class="dashboard-kpi-label">Repaid capital</p>
+            <p class="dashboard-kpi-value">{{ portfolio.financial.total_repaid_capital }}</p>
+        </div>
+        <div class="dashboard-glass dashboard-card dashboard-kpi-card dashboard-kpi-card-financial">
+            <p class="dashboard-kpi-label">Repayment completion</p>
+            <p class="dashboard-kpi-value">{{ portfolio.financial.repayment_completion_ratio }}%</p>
+        </div>
+        <div class="dashboard-glass dashboard-card dashboard-kpi-card dashboard-kpi-card-financial">
+            <p class="dashboard-kpi-label">Overdue exposure</p>
+            <p class="dashboard-kpi-value">{{ portfolio.financial.overdue_exposure }}</p>
+        </div>
+        <div class="dashboard-glass dashboard-card dashboard-kpi-card dashboard-kpi-card-financial">
+            <p class="dashboard-kpi-label">Collections exposure</p>
+            <p class="dashboard-kpi-value">{{ portfolio.financial.collections_exposure }}</p>
+        </div>
+        <div class="dashboard-glass dashboard-card dashboard-kpi-card dashboard-kpi-card-financial">
+            <p class="dashboard-kpi-label">Delinquency ratio</p>
+            <p class="dashboard-kpi-value">{{ portfolio.financial.delinquency_ratio }}%</p>
+        </div>
+    </div>
+
+    {% if portfolio.insights %}
+    <div class="dashboard-insight-panel dashboard-portfolio-insights">
+        <h3 class="dashboard-panel-title">Portfolio insights</h3>
+        <ul class="dashboard-insight-list">
+            {% for line in portfolio.insights %}
+            <li>{{ line }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <div class="dashboard-overview-grid dashboard-overview-grid-triple">
+        {% if portfolio.aging %}
+        <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+            <h3 class="dashboard-panel-title">Portfolio aging</h3>
+            <div class="dashboard-chart-frame dashboard-chart-frame-list">
+                <ul class="dashboard-distribution-list">
+                    {% for row in portfolio.aging %}
+                    <li class="dashboard-distribution-item">
+                        <div class="dashboard-distribution-meta">
+                            <span class="dashboard-distribution-label">{{ row.label }}</span>
+                            <span class="dashboard-distribution-count">{{ row.count }} · {{ row.exposure }}</span>
+                        </div>
+                        <div class="dashboard-distribution-track" role="presentation">
+                            <span class="dashboard-distribution-fill dashboard-distribution-fill-aging" style="width: {{ row.share }}%;"></span>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if show_repayment_trend and portfolio.repayment_trend %}
+        <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+            <h3 class="dashboard-panel-title">Repayment activity</h3>
+            <div class="dashboard-chart-frame">
+                {% with points=portfolio.repayment_trend, chart_label='Repayments recorded', empty_message='No repayments in this period.' %}
+                {% include 'partials/dashboard_trend_chart.html' %}
+                {% endwith %}
+            </div>
+            {% if portfolio.repayment_performance.payment_count %}
+            <p class="dashboard-overview-footnote">
+                Period volume: <strong>{{ portfolio.repayment_performance.payment_total }}</strong>
+                across {{ portfolio.repayment_performance.payment_count }} payment(s).
+            </p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if portfolio.underwriting_outcomes.total_reviewed %}
+        <div class="dashboard-glass dashboard-card">
+            <h3 class="dashboard-panel-title">Financing decisions (period)</h3>
+            <dl class="dashboard-meta dashboard-meta-columns">
+                <div><dt>Reviewed</dt><dd>{{ portfolio.underwriting_outcomes.total_reviewed }}</dd></div>
+                <div><dt>Approved</dt><dd>{{ portfolio.underwriting_outcomes.approved }}</dd></div>
+                <div><dt>Rejected</dt><dd>{{ portfolio.underwriting_outcomes.rejected }}</dd></div>
+                <dt>Approval rate</dt><dd>{{ portfolio.underwriting_outcomes.approval_rate }}%</dd></div>
+                <div><dt>Escalated</dt><dd>{{ portfolio.underwriting_outcomes.escalated }}</dd></div>
+                <div><dt>Conditional</dt><dd>{{ portfolio.underwriting_outcomes.conditional }}</dd></div>
+            </dl>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if portfolio.collections_workload %}
+    <div class="dashboard-section dashboard-section-nested">
+        <header class="dashboard-section-header">
+            <h3 class="dashboard-title">Collections workload</h3>
+        </header>
+        <div class="dashboard-glass dashboard-card dashboard-table-container">
+            <table class="dashboard-table dashboard-table-compact">
+                <thead>
+                <tr>
+                    <th>Officer</th>
+                    <th>Cases</th>
+                    <th>Exposure</th>
+                </tr>
+                </thead>
+                <tbody>
+                {% for row in portfolio.collections_workload %}
+                <tr>
+                    <td>{{ row.officer }}</td>
+                    <td>{{ row.collections_cases }}</td>
+                    <td>{{ row.exposure }}</td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if portfolio.throughput %}
+    <div class="dashboard-insight-panel dashboard-portfolio-throughput">
+        <p>
+            <strong>Operational throughput:</strong>
+            {{ portfolio.throughput.applications_created }} applications created,
+            {{ portfolio.throughput.loans_activated }} loans issued,
+            {{ portfolio.throughput.repayments_recorded }} repayments recorded
+            {% if range_label %}in {{ range_label|lower }}{% endif %}.
+        </p>
+    </div>
+    {% endif %}
+</section>

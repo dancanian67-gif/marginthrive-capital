@@ -2237,3 +2237,29 @@ input, select {
 .dashboard-table-row-loan-delinquent {
     background: rgba(248, 113, 113, 0.06);
 }
+
+/* ===== PORTFOLIO INTELLIGENCE (Phase E1) ===== */
+.dashboard-portfolio-section {
+    margin-bottom: var(--space-lg);
+}
+
+.dashboard-kpi-grid-portfolio {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.dashboard-kpi-card-financial .dashboard-kpi-value {
+    color: #a5f3fc;
+}
+
+.dashboard-portfolio-insights,
+.dashboard-portfolio-throughput {
+    margin-bottom: var(--space-md);
+}
+
+.dashboard-section-nested {
+    margin-top: var(--space-lg);
+}
+
+.dashboard-distribution-fill-aging {
+    background: linear-gradient(90deg, rgba(34, 197, 94, 0.7), rgba(251, 191, 36, 0.8), rgba(248, 113, 113, 0.85));
+}

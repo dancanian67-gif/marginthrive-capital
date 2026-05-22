@@ -11,6 +11,7 @@ REPORT_EXPORT_TYPES = frozenset(
         "fraud",
         "officers",
         "backlog",
+        "portfolio",
     }
 )
 

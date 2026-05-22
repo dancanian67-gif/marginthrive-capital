@@ -87,6 +87,7 @@ from services.filters import (
     safe_return_url,
 )
 from services.overview import overview_drilldown_links
+from services.portfolio_intelligence import build_portfolio_intelligence_package, portfolio_export_metric_rows
 from services.reporting import build_reports_page_data, report_export_urls
 from services.loans import (
     delinquency_context,
@@ -132,6 +133,7 @@ def admin_overview():
     officer_workload = fetch_officer_workload(cursor)
     recent_applications = fetch_recent_applications(cursor)
     attention_applications = fetch_attention_applications(cursor)
+    portfolio = build_portfolio_intelligence_package(cursor, "30d")
 
     conn.close()
 
@@ -160,6 +162,9 @@ def admin_overview():
         active_nav="overview",
         page_title="Operations Overview",
         portfolio_empty=kpis["total_applications"] == 0,
+        portfolio=portfolio,
+        range_label="Last 30 days",
+        show_repayment_trend=True,
     )
 
 
@@ -195,9 +200,12 @@ def admin_analytics():
     for item in loan_lifecycle_portfolio:
         item["share"] = round((item["count"] / loan_total) * 100, 1)
 
+    portfolio = build_portfolio_intelligence_package(cursor, range_key)
+
     conn.close()
 
     insights = analytics_insights(period_kpis, backlog, officer_workload, pipeline_distribution)
+    insights = (portfolio["insights"] + insights)[:8]
 
     return render_template(
         "analytics.html",
@@ -218,6 +226,8 @@ def admin_analytics():
         underwriting_portfolio=underwriting_portfolio,
         loan_lifecycle_portfolio=loan_lifecycle_portfolio,
         insights=insights,
+        portfolio=portfolio,
+        show_repayment_trend=True,
         active_nav="analytics",
         page_title="Operational Analytics",
         portfolio_empty=period_kpis["total_applications"] == 0,
@@ -243,6 +253,7 @@ def admin_reports():
         time_ranges=ANALYTICS_TIME_RANGES,
         export_urls=report_export_urls(range_key),
         portfolio_empty=report_data["portfolio_kpis"]["total_applications"] == 0,
+        show_repayment_trend=True,
         **report_data,
     )
 
@@ -386,6 +397,47 @@ def admin_export_report(report_type: str):
         filename = f"officer_workload_{range_key}.csv"
         log_admin_export("report_officers", filename=filename, range_key=range_key, row_count=len(rows))
         return make_csv_response(filename, officer_columns, rows)
+
+    if report_type == "portfolio":
+        portfolio = data["portfolio_intelligence"]
+        metric_columns = (("metric", "metric"), ("value", "value"))
+        metric_rows = portfolio_export_metric_rows(
+            portfolio["financial"],
+            portfolio["underwriting_outcomes"],
+            portfolio["throughput"],
+        )
+        aging_columns = (
+            ("label", "label"),
+            ("count", "count"),
+            ("exposure", "exposure"),
+            ("share_pct", "share"),
+        )
+        aging_rows = [
+            {
+                "label": item["label"],
+                "count": item["count"],
+                "exposure": item["exposure"],
+                "share_pct": item.get("share", ""),
+            }
+            for item in portfolio["aging"]
+        ]
+        collections_columns = (
+            ("officer", "officer"),
+            ("collections_cases", "collections_cases"),
+            ("exposure", "exposure"),
+        )
+        sections = [
+            ("Portfolio financial metrics", metric_columns, metric_rows),
+            ("Portfolio aging", aging_columns, aging_rows),
+            (
+                "Collections workload",
+                collections_columns,
+                portfolio["collections_workload"],
+            ),
+        ]
+        filename = f"portfolio_intelligence_{range_key}.csv"
+        log_admin_export("report_portfolio", filename=filename, range_key=range_key)
+        return make_sectioned_csv_response(filename, sections)
 
     if report_type == "backlog":
         rows = distribution_export_rows(data["backlog"]["pipeline_backlog"])

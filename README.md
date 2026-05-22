@@ -86,6 +86,14 @@ Active loan operations are tracked separately from pipeline workflow and financi
 
 No payment gateways, mobile money, or customer portals — operators enter repayments manually.
 
+## Portfolio intelligence (Phase E1)
+
+Executive and analytics views combine **operational KPIs** (pipeline, fraud, officers) with **portfolio financial KPIs** (issued/repaid capital, outstanding balances, overdue and collections exposure, delinquency ratio, portfolio aging).
+
+- **Overview** and **Analytics** include a Portfolio intelligence section; period metrics respect the analytics time range on Analytics/Reports.
+- **CSV export:** `GET /admin/export/report/portfolio?range=30d` — financial metrics, aging buckets, collections workload.
+- Calculations are read-only SQL over `applications` and `repayments` — no new tables, no external BI.
+
 ## Reports & exports (Phase B3)
 
 Operational reports and CSV exports are available at `/admin/reports`, with filtered application exports from `/admin` and audit exports from application detail. See [docs/WORKFLOW_SCHEMA.md](docs/WORKFLOW_SCHEMA.md#operational-reports--exports-phase-b3).
