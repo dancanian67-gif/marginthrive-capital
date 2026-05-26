@@ -71,6 +71,7 @@
     </div>
     {% endif %}
 
+    {% if operator_can('mutate_underwriting') %}
     <form
         class="dashboard-form dashboard-underwriting-form"
         method="POST"
@@ -147,4 +148,7 @@
             <button type="submit" class="dashboard-btn-primary">Save underwriting review</button>
         </div>
     </form>
+    {% else %}
+    <p class="dashboard-muted">Underwriting updates require review officer, operations manager, or administrator access.</p>
+    {% endif %}
 </div>

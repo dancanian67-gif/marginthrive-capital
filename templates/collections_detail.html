@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% set page_title = page_title|default('Collections detail') %}
+    {% include 'partials/dashboard_head.html' %}
+</head>
+<body>
+
+<div class="dashboard-page">
+    <div class="dashboard-layout">
+        {% include 'partials/dashboard_nav.html' %}
+
+        <main class="dashboard-shell dashboard-content dashboard-main">
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <p class="dashboard-breadcrumb">
+                        <a class="dashboard-link" href="{{ url_for('admin_collections', return=list_return_url) if list_return_url else url_for('admin_collections') }}">← Collections queue</a>
+                        ·
+                        <a class="dashboard-link" href="{{ application_detail_url }}">Application #{{ application.id }}</a>
+                    </p>
+                    <h1 class="dashboard-title">{{ application.business_name }}</h1>
+                    <p class="dashboard-subtitle">{{ loan_servicing_summary }}</p>
+                </header>
+
+                {% include 'partials/dashboard_flash.html' %}
+
+                {% if delinquency.show_collections_banner %}
+                <p class="dashboard-loan-delinquency-banner" role="status">
+                    Collections attention:
+                    {% if delinquency.delinquency_label %}{{ delinquency.delinquency_label }}.{% endif %}
+                    Intelligence priority: <strong>{{ account.intelligence_tier_label }}</strong> (score {{ account.intelligence_score }}/100).
+                    {{ account.queue_aging_label }}.
+                </p>
+                {% endif %}
+
+                {% if account.followup and (account.followup.warnings or account.followup.recommendations) %}
+                <div class="dashboard-insight-panel dashboard-overview-insight" role="status">
+                    {% for warning in account.followup.warnings %}
+                    <p class="dashboard-followup-warning">⚠ {{ warning }}</p>
+                    {% endfor %}
+                    {% for rec in account.followup.recommendations %}
+                    <p class="dashboard-followup-rec">→ {{ rec }}</p>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="dashboard-overview-grid">
+                    <div class="dashboard-glass dashboard-card">
+                        <h2 class="dashboard-panel-title">Delinquency snapshot</h2>
+                        <ul class="dashboard-meta-list">
+                            <li><strong>Days overdue:</strong> {{ account.days_overdue|default(0) }}</li>
+                            <li><strong>Aging bucket:</strong> {{ account.delinquency_bucket_label }}</li>
+                            <li><strong>Outstanding:</strong> {{ application.outstanding_balance or '—' }}</li>
+                            <li><strong>Due date:</strong> {{ application.due_date or '—' }}</li>
+                            <li><strong>Repayment risk:</strong> {{ repayment_risk_labels.get(application.repayment_risk_level, application.repayment_risk_level) }}</li>
+                            <li><strong>Missed payment signal:</strong> {% if account.missed_payment_flag %}Yes{% else %}No{% endif %}</li>
+                            <li><strong>Intelligence tier:</strong> {{ account.intelligence_tier_label }} ({{ account.intelligence_score }})</li>
+                        </ul>
+                    </div>
+
+                    <div class="dashboard-glass dashboard-card">
+                        <h2 class="dashboard-panel-title">Recent repayments</h2>
+                        {% if repayment_history %}
+                        <ul class="dashboard-timeline-compact">
+                            {% for payment in repayment_history[:5] %}
+                            <li>{{ payment.payment_date }} — {{ payment.payment_amount }} (balance {{ payment.balance_after }})</li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="dashboard-empty-message">No repayments recorded.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% include 'partials/dashboard_collections_promises.html' %}
+
+                {% if can_mutate_collections %}
+                <div class="dashboard-glass dashboard-card">
+                    <h2 class="dashboard-panel-title">Update collections record</h2>
+                    <form method="POST" action="{{ url_for('admin_collections_update', application_id=application.id) }}" class="dashboard-form-stack">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                        <div class="dashboard-form-grid">
+                            <div class="dashboard-form-row">
+                                <label for="collections_status">Collections status</label>
+                                <select id="collections_status" name="collections_status" required>
+                                    {% for status in collections_statuses %}
+                                    <option value="{{ status }}" {% if application.collections_status == status %}selected{% endif %}>
+                                        {{ collections_status_labels.get(status, status) }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="collections_priority">Priority</label>
+                                <select id="collections_priority" name="collections_priority" required>
+                                    {% for priority in collections_priorities %}
+                                    <option value="{{ priority }}" {% if application.collections_priority == priority %}selected{% endif %}>
+                                        {{ collections_priority_labels.get(priority, priority) }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="collections_risk_level">Collections risk</label>
+                                <select id="collections_risk_level" name="collections_risk_level" required>
+                                    {% for risk in collections_risk_levels %}
+                                    <option value="{{ risk }}" {% if application.collections_risk_level == risk %}selected{% endif %}>
+                                        {{ collections_risk_labels.get(risk, risk) }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="collections_assigned_to">Assigned officer</label>
+                                <input id="collections_assigned_to" type="text" name="collections_assigned_to" list="collections-officers" value="{{ application.collections_assigned_to }}">
+                                <datalist id="collections-officers">
+                                    {% for officer in officers %}
+                                    <option value="{{ officer }}"></option>
+                                    {% endfor %}
+                                </datalist>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="collections_last_contact_at">Last contact</label>
+                                <input id="collections_last_contact_at" type="date" name="collections_last_contact_at" value="{{ application.collections_last_contact_at or '' }}">
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="collections_next_follow_up">Next follow-up</label>
+                                <input id="collections_next_follow_up" type="date" name="collections_next_follow_up" value="{{ application.collections_next_follow_up or '' }}">
+                            </div>
+                        </div>
+                        <div class="dashboard-form-row">
+                            <label for="collections_notes_summary">Recovery notes summary</label>
+                            <textarea id="collections_notes_summary" name="collections_notes_summary" rows="4">{{ application.collections_notes_summary }}</textarea>
+                        </div>
+                        <div class="dashboard-form-row">
+                            <label for="collections_context">Governance context (required for escalations)</label>
+                            <textarea id="collections_context" name="collections_context" rows="2" placeholder="Legal escalation rationale, dispute notes, or manual override context"></textarea>
+                        </div>
+                        <button type="submit" class="dashboard-btn-primary">Save collections update</button>
+                    </form>
+                </div>
+                {% else %}
+                <div class="dashboard-glass dashboard-card">
+                    <h2 class="dashboard-panel-title">Collections record (read-only)</h2>
+                    <ul class="dashboard-meta-list">
+                        <li><strong>Status:</strong> {{ collections_status_labels.get(application.collections_status, application.collections_status) }}</li>
+                        <li><strong>Priority:</strong> {{ collections_priority_labels.get(application.collections_priority, application.collections_priority) }}</li>
+                        <li><strong>Assigned:</strong> {{ application.collections_assigned_to or '—' }}</li>
+                        <li><strong>Next follow-up:</strong> {{ application.collections_next_follow_up or '—' }}</li>
+                        <li><strong>Notes:</strong> {{ application.collections_notes_summary or '—' }}</li>
+                    </ul>
+                </div>
+                {% endif %}
+
+                {% include 'partials/dashboard_collections_timeline.html' %}
+
+                <div class="dashboard-glass dashboard-card">
+                    <h2 class="dashboard-panel-title">Recovery history (batches)</h2>
+                    {% if collections_history %}
+                    <ul class="dashboard-timeline">
+                        {% for batch in collections_history %}
+                        <li class="dashboard-timeline-item{% if batch.is_critical %} dashboard-timeline-critical{% endif %}">
+                            <p class="dashboard-timeline-meta">{{ batch.created_at }} · {{ batch.actor }}</p>
+                            <p><strong>{{ batch.status_label }}</strong> — {{ collections_priority_labels.get(batch.collections_priority, batch.collections_priority) }}</p>
+                            {% if batch.collections_assigned_to %}
+                            <p>Assigned: {{ batch.collections_assigned_to }}</p>
+                            {% endif %}
+                            {% if batch.context_notes %}
+                            <p class="dashboard-timeline-notes">{{ batch.context_notes }}</p>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="dashboard-empty-message">No collections recovery events recorded yet.</p>
+                    {% endif %}
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+
+</body>
+</html>

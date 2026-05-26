@@ -1,4 +1,5 @@
 from constants.analytics import ANALYTICS_TIME_RANGES, DEFAULT_ANALYTICS_RANGE
+from utils.db_compat import datetime_filter_clause
 
 
 def parse_analytics_range(args) -> str:
@@ -9,10 +10,5 @@ def parse_analytics_range(args) -> str:
 
 
 def analytics_datetime_clause(range_key: str, column: str = "created_at") -> tuple[str, list]:
-    if range_key == "all":
-        return "", []
-    if range_key == "today":
-        return f" AND date({column}) = date('now')", []
-    day_map = {"7d": 7, "30d": 30, "90d": 90}
-    days = day_map[range_key]
-    return f" AND datetime({column}) >= datetime('now', '-{days} days')", []
+    """Backward-compatible wrapper; prefer services.analytics_query in new code."""
+    return datetime_filter_clause(range_key, column)

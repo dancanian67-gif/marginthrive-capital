@@ -43,13 +43,29 @@ def register_error_handlers(app) -> None:
         )
 
 
+def _admin_error_redirect():
+    """Pick a safe redirect target that will not loop on the failing route."""
+    endpoint = request.endpoint or ""
+    login_endpoints = {"admin_login", "auth.admin_login"}
+    overview_endpoints = {"admin_overview", "admin.admin_overview", "admin", "admin.admin"}
+
+    if endpoint in login_endpoints:
+        return redirect(url_for("admin_login"))
+
+    # Second-chance fallback: overview already failed once in this chain.
+    if endpoint in overview_endpoints or request.args.get("_err"):
+        return redirect(url_for("admin_login"))
+
+    return redirect(url_for("admin_overview", _err=1))
+
+
 def _handle_operational_error(error, status_code: int, admin_message: str, *, public_message: str | None = None):
     if _wants_json_response():
         return jsonify({"status": "error", "message": admin_message}), status_code
 
     if _is_admin_request():
         flash(admin_message, "error")
-        return redirect(url_for("admin_overview"))
+        return _admin_error_redirect()
 
     message = public_message or GENERIC_PUBLIC_ERROR
     return message, status_code

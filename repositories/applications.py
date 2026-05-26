@@ -217,14 +217,7 @@ def fetch_attention_applications(cursor, limit: int = OVERVIEW_LIST_LIMIT) -> li
         ),
     )
     return cursor.fetchall()
-def fetch_applications_for_export(
-    cursor,
-    where_sql: str,
-    where_params: list,
-    limit: int = REPORT_EXPORT_MAX_ROWS,
-) -> list[dict]:
-    cursor.execute(
-        f"""
+_APPLICATION_EXPORT_SELECT = """
         SELECT
             id,
             business_name,
@@ -254,13 +247,73 @@ def fetch_applications_for_export(
             created_at,
             updated_at
         FROM applications
+"""
+
+_APPLICATION_EXPORT_COLUMNS = (
+    "id",
+    "business_name",
+    "owner_name",
+    "email",
+    "revenue",
+    "product",
+    "status",
+    "sub_status",
+    "risk_level",
+    "flagged_fraud",
+    "assigned_officer",
+    "underwriting_status",
+    "decision_summary",
+    "reviewed_by",
+    "reviewed_at",
+    "loan_lifecycle_status",
+    "loan_account_number",
+    "issued_amount",
+    "outstanding_balance",
+    "repayment_progress",
+    "issue_date",
+    "due_date",
+    "repayment_frequency",
+    "repayment_risk_level",
+    "last_payment_at",
+    "created_at",
+    "updated_at",
+)
+
+
+def count_applications_for_export(cursor, where_sql: str, where_params: list) -> int:
+    cursor.execute(
+        f"SELECT COUNT(*) FROM applications {where_sql}",
+        where_params,
+    )
+    return cursor.fetchone()[0] or 0
+
+
+def iter_applications_for_export(
+    cursor,
+    where_sql: str,
+    where_params: list,
+    limit: int = REPORT_EXPORT_MAX_ROWS,
+):
+    cursor.execute(
+        f"""
+{_APPLICATION_EXPORT_SELECT}
         {where_sql}
         ORDER BY id DESC
         LIMIT ?
         """,
         (*where_params, limit),
     )
-    return [dict(row) for row in cursor.fetchall()]
+    for row in cursor:
+        yield {column: row[column] for column in _APPLICATION_EXPORT_COLUMNS}
+
+
+def fetch_applications_for_export(
+    cursor,
+    where_sql: str,
+    where_params: list,
+    limit: int = REPORT_EXPORT_MAX_ROWS,
+) -> list[dict]:
+    return list(iter_applications_for_export(cursor, where_sql, where_params, limit))
 def fetch_fraud_review_summary(cursor) -> dict:
     cursor.execute(
         """

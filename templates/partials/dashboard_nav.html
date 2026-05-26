@@ -19,11 +19,28 @@
             Overview
         </a>
         <a
+            href="{{ url_for('admin_notifications') }}"
+            class="dashboard-nav-link{% if active_nav == 'notifications' %} is-active{% endif %}"
+        >
+            Notifications
+            {% if notification_unread_count %}
+            <span class="dashboard-nav-badge">{{ notification_unread_count }}</span>
+            {% endif %}
+        </a>
+        <a
             href="{{ url_for('admin') }}"
             class="dashboard-nav-link{% if active_nav == 'applications' %} is-active{% endif %}"
         >
             Applications
         </a>
+        {% if operator_can('view_collections') %}
+        <a
+            href="{{ url_for('admin_collections') }}"
+            class="dashboard-nav-link{% if active_nav == 'collections' %} is-active{% endif %}"
+        >
+            Collections
+        </a>
+        {% endif %}
         <a
             href="{{ url_for('admin_analytics') }}"
             class="dashboard-nav-link{% if active_nav == 'analytics' %} is-active{% endif %}"
@@ -36,7 +53,7 @@
         >
             Reports
         </a>
-        {% if current_operator and current_operator.role == 'administrator' %}
+        {% if operator_can('manage_operators') %}
         <a
             href="{{ url_for('admin_operators') }}"
             class="dashboard-nav-link{% if active_nav == 'operators' %} is-active{% endif %}"

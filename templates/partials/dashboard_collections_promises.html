@@ -1,0 +1,84 @@
+<div class="dashboard-glass dashboard-card">
+    <h2 class="dashboard-panel-title">Recovery promises</h2>
+
+    {% if promise_recommendations and (promise_recommendations.warnings or promise_recommendations.recommendations) %}
+    <div class="dashboard-insight-panel dashboard-overview-insight">
+        {% for warning in promise_recommendations.warnings %}
+        <p class="dashboard-followup-warning">⚠ {{ warning }}</p>
+        {% endfor %}
+        {% for rec in promise_recommendations.recommendations %}
+        <p class="dashboard-followup-rec">→ {{ rec }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if promise_summary.active_promise %}
+    {% set ap = promise_summary.active_promise %}
+    <div class="dashboard-promise-active-panel" role="status">
+        <h3 class="dashboard-panel-subtitle">Active promise</h3>
+        <ul class="dashboard-meta-list">
+            <li><strong>Amount:</strong> KSh {{ ap.promise_amount }}</li>
+            <li><strong>Due date:</strong> {{ ap.promise_date }}{% if account.promise_overdue %} <span class="dashboard-badge dashboard-badge-warn">Overdue</span>{% endif %}</li>
+            <li><strong>Recorded by:</strong> {{ ap.created_by }}</li>
+            <li><strong>Notes:</strong> {{ ap.commitment_notes or '—' }}</li>
+        </ul>
+        {% if can_mutate_collections %}
+        <form method="POST" action="{{ url_for('admin_collections_promise_status', application_id=application.id, promise_id=ap.id) }}" class="dashboard-form-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="dashboard-form-row">
+                <label for="promise_status_update">Update status</label>
+                <select id="promise_status_update" name="promise_status" required>
+                    <option value="fulfilled">Fulfilled</option>
+                    <option value="broken">Broken</option>
+                    <option value="cancelled">Cancelled</option>
+                </select>
+            </div>
+            <div class="dashboard-form-row">
+                <label for="promise_context_status">Governance context</label>
+                <input id="promise_context_status" type="text" name="promise_context" placeholder="Required for broken / cancelled">
+            </div>
+            <button type="submit" class="dashboard-btn-secondary">Apply status</button>
+        </form>
+        {% endif %}
+    </div>
+    {% elif can_mutate_collections %}
+    <h3 class="dashboard-panel-subtitle">Record new promise</h3>
+    <form method="POST" action="{{ url_for('admin_collections_promise_create', application_id=application.id) }}" class="dashboard-form-stack">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="dashboard-form-grid">
+            <div class="dashboard-form-row">
+                <label for="promise_amount">Promise amount</label>
+                <input id="promise_amount" type="number" step="0.01" min="0.01" name="promise_amount" required>
+            </div>
+            <div class="dashboard-form-row">
+                <label for="promise_date">Promise date</label>
+                <input id="promise_date" type="date" name="promise_date" required>
+            </div>
+        </div>
+        <div class="dashboard-form-row">
+            <label for="commitment_notes">Commitment notes</label>
+            <textarea id="commitment_notes" name="commitment_notes" rows="3"></textarea>
+        </div>
+        <div class="dashboard-form-row">
+            <label for="promise_context_create">Governance context (optional)</label>
+            <input id="promise_context_create" type="text" name="promise_context" placeholder="Escalated commitment rationale">
+        </div>
+        <button type="submit" class="dashboard-btn-primary">Create promise</button>
+    </form>
+    {% else %}
+    <p class="dashboard-empty-message">No active promise on this account.</p>
+    {% endif %}
+
+    {% if promise_history %}
+    <h3 class="dashboard-panel-subtitle">Promise history</h3>
+    <ul class="dashboard-timeline dashboard-timeline-compact">
+        {% for entry in promise_history %}
+        <li class="dashboard-timeline-item{% if entry.is_critical %} dashboard-timeline-critical{% endif %}">
+            <span class="dashboard-meta">{{ entry.created_at }} · {{ entry.actor }}</span>
+            <strong>{{ entry.status_label }}</strong> — KSh {{ entry.promise_amount }} due {{ entry.promise_date }}
+            {% if entry.context_notes %}<br><span class="dashboard-timeline-notes">{{ entry.context_notes }}</span>{% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+</div>

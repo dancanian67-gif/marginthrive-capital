@@ -114,6 +114,86 @@
                     </ul>
                 </div>
 
+                {% if collections_analytics %}
+                <div class="dashboard-glass dashboard-card dashboard-report-card">
+                    <header class="dashboard-report-card-header">
+                        <h2 class="dashboard-panel-title">Collections &amp; recovery</h2>
+                        <a class="dashboard-link" href="{{ url_for('admin_collections') }}">Open workspace</a>
+                    </header>
+                    <dl class="dashboard-meta">
+                        <div><dt>Queue total</dt><dd>{{ collections_analytics.kpis.queue_total }}</dd></div>
+                        <div><dt>Urgent cases</dt><dd>{{ collections_analytics.kpis.urgent_count }}</dd></div>
+                        <div><dt>Follow-ups due</dt><dd>{{ collections_analytics.kpis.follow_up_due_count }}</dd></div>
+                        <div><dt>Outstanding exposure</dt><dd>KSh {{ '{:,.0f}'.format(collections_analytics.kpis.total_exposure) }}</dd></div>
+                    </dl>
+                    <p class="dashboard-report-footnote">
+                        <a class="dashboard-link" href="{{ export_urls.collections_delinquent }}">Delinquent accounts CSV</a>
+                        ·
+                        <a class="dashboard-link" href="{{ export_urls.collections_recovery_summary }}">Recovery summary</a>
+                        ·
+                        <a class="dashboard-link" href="{{ export_urls.collections_escalation_report }}">Escalation report</a>
+                        ·
+                        <a class="dashboard-link" href="{{ export_urls.collections_officer_recovery }}">Officer recovery</a>
+                        ·
+                        <a class="dashboard-link" href="{{ export_urls.collections_outcome_distribution }}">Outcome distribution</a>
+                    </p>
+                </div>
+                {% if collections_analytics and collections_analytics.promises %}
+                <div class="dashboard-glass dashboard-card dashboard-report-card">
+                    <header class="dashboard-report-card-header">
+                        <h2 class="dashboard-panel-title">Promise commitments</h2>
+                    </header>
+                    <dl class="dashboard-meta">
+                        <div><dt>Active</dt><dd>{{ collections_analytics.promises.metrics.active_promises }}</dd></div>
+                        <div><dt>Fulfilled</dt><dd>{{ collections_analytics.promises.metrics.fulfilled_count }}</dd></div>
+                        <div><dt>Broken</dt><dd>{{ collections_analytics.promises.metrics.broken_count }}</dd></div>
+                        <div><dt>Fulfillment rate</dt><dd>{{ collections_analytics.promises.metrics.fulfillment_rate_pct }}%</dd></div>
+                    </dl>
+                    <p class="dashboard-report-footnote">
+                        <a class="dashboard-link" href="{{ export_urls.promises_active }}">Active promises</a>
+                        ·
+                        <a class="dashboard-link" href="{{ export_urls.promises_broken }}">Broken</a>
+                        ·
+                        <a class="dashboard-link" href="{{ export_urls.promises_overdue }}">Overdue commitments</a>
+                    </p>
+                </div>
+                {% endif %}
+
+                {% if collections_analytics and collections_analytics.recovery %}
+                <div class="dashboard-glass dashboard-card dashboard-report-card">
+                    <header class="dashboard-report-card-header">
+                        <h2 class="dashboard-panel-title">Recovery outcomes</h2>
+                    </header>
+                    <ul class="dashboard-report-stat-list">
+                        {% for item in collections_analytics.recovery.outcome_distribution[:8] %}
+                        <li><span>{{ item.label }}</span><strong>{{ item.count }} ({{ item.share }}%)</strong></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+                {% endif %}
+
+                {% if notifications_analytics %}
+                <div class="dashboard-glass dashboard-card dashboard-report-card">
+                    <header class="dashboard-report-card-header">
+                        <h2 class="dashboard-panel-title">Operational notifications</h2>
+                    </header>
+                    <dl class="dashboard-meta">
+                        <div><dt>Period total</dt><dd>{{ notifications_analytics.metrics.total_period }}</dd></div>
+                        <div><dt>Unresolved</dt><dd>{{ notifications_analytics.metrics.unresolved_period }}</dd></div>
+                        <div><dt>Acknowledgement rate</dt><dd>{{ notifications_analytics.metrics.acknowledgement_rate_pct }}%</dd></div>
+                        <div><dt>Governance alerts</dt><dd>{{ notifications_analytics.metrics.governance_alerts_period }}</dd></div>
+                    </dl>
+                    <p class="dashboard-report-footnote">
+                        <a class="dashboard-link" href="{{ export_urls.notifications_unresolved }}">Unresolved export</a>
+                        ·
+                        <a class="dashboard-link" href="{{ export_urls.notifications_governance }}">Governance alerts</a>
+                        ·
+                        <a class="dashboard-link" href="{{ export_urls.notifications_critical_events }}">Critical events</a>
+                    </p>
+                </div>
+                {% endif %}
+
                 <div class="dashboard-glass dashboard-card dashboard-report-card">
                     <header class="dashboard-report-card-header">
                         <h2 class="dashboard-panel-title">Loan servicing</h2>

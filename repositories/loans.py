@@ -329,12 +329,40 @@ def fetch_loan_portfolio_kpis(cursor) -> dict:
     }
 
 
-def fetch_repayments_for_export(
+_REPAYMENT_EXPORT_COLUMNS = (
+    "id",
+    "application_id",
+    "business_name",
+    "loan_account_number",
+    "payment_date",
+    "payment_amount",
+    "balance_before",
+    "balance_after",
+    "repayment_notes",
+    "actor",
+    "created_at",
+)
+
+
+def count_repayments_for_export(cursor, where_sql: str, where_params: list) -> int:
+    cursor.execute(
+        f"""
+        SELECT COUNT(*)
+        FROM repayments r
+        INNER JOIN applications a ON a.id = r.application_id
+        {where_sql}
+        """,
+        where_params,
+    )
+    return cursor.fetchone()[0] or 0
+
+
+def iter_repayments_for_export(
     cursor,
     where_sql: str,
     where_params: list,
     limit: int,
-) -> list[dict]:
+):
     cursor.execute(
         f"""
         SELECT
@@ -357,4 +385,14 @@ def fetch_repayments_for_export(
         """,
         (*where_params, limit),
     )
-    return [dict(row) for row in cursor.fetchall()]
+    for row in cursor:
+        yield {column: row[column] for column in _REPAYMENT_EXPORT_COLUMNS}
+
+
+def fetch_repayments_for_export(
+    cursor,
+    where_sql: str,
+    where_params: list,
+    limit: int,
+) -> list[dict]:
+    return list(iter_repayments_for_export(cursor, where_sql, where_params, limit))

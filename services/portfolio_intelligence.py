@@ -1,6 +1,6 @@
 """Portfolio intelligence orchestration and executive insights (Phase E1)."""
 
-from services.analytics import fill_daily_trend, prepare_trend_chart
+from services.analytics_query import fill_daily_trend, prepare_trend_chart
 from repositories.portfolio import (
     fetch_collections_workload,
     fetch_operational_throughput,

@@ -1,13 +1,30 @@
 import sqlite3
 
 from constants.app import DATABASE_PATH
+from constants.ops import SQLITE_BUSY_TIMEOUT_MS, SQLITE_ENABLE_WAL
 from constants.schema import APPLICATIONS_SCHEMA_COLUMNS
 from constants.workflow import DEFAULT_APPLICATION_STATUS, DEFAULT_RISK_LEVEL
 
-def get_db_connection():
+
+def configure_sqlite_connection(conn: sqlite3.Connection) -> None:
+    """Apply pragmas for WAL, busy timeout, and referential integrity."""
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS}")
+    if SQLITE_ENABLE_WAL:
+        conn.execute("PRAGMA journal_mode = WAL")
+
+
+def get_db_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DATABASE_PATH)
     conn.row_factory = sqlite3.Row
+    configure_sqlite_connection(conn)
     return conn
+
+
+def fetch_sqlite_journal_mode(cursor) -> str:
+    cursor.execute("PRAGMA journal_mode")
+    row = cursor.fetchone()
+    return (row[0] if row else "").lower()
 
 
 def _applications_column_names(cursor) -> set[str]:
@@ -114,6 +131,23 @@ def init_db():
     seed_bootstrap_operator(cursor)
     migrate_underwriting_columns(cursor)
     migrate_loan_columns(cursor)
+    from repositories.collections import (
+        init_collections_history_table,
+        migrate_collections_columns,
+    )
+
+    init_collections_history_table(cursor)
+    migrate_collections_columns(cursor)
+    from repositories.promises import init_recovery_promises_tables
+
+    init_recovery_promises_tables(cursor)
+    from repositories.notifications import init_operational_notifications_tables
+
+    init_operational_notifications_tables(cursor)
+
+    from repositories.indexes import init_performance_indexes
+
+    init_performance_indexes(cursor)
 
     conn.commit()
     conn.close()

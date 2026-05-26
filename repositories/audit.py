@@ -1,6 +1,7 @@
 from constants.audit import WORKFLOW_HISTORY_LIMIT
 from constants.reporting import REPORT_EXPORT_MAX_ROWS
-from utils.time_range import analytics_datetime_clause
+from services.analytics_query import analytics_datetime_clause
+from utils.db_compat import datetime_order_expression, non_empty_timestamp_predicate
 
 
 def init_workflow_history_table(cursor) -> None:
@@ -66,19 +67,61 @@ def fetch_workflow_history_rows(cursor, application_id: int, limit: int = WORKFL
     return cursor.fetchall()
 
 
-def fetch_audit_history_for_export(
-    cursor,
-    range_key: str,
-    application_id: int | None = None,
-    limit: int = REPORT_EXPORT_MAX_ROWS,
-) -> list[dict]:
+_AUDIT_EXPORT_COLUMNS = (
+    "id",
+    "application_id",
+    "business_name",
+    "batch_id",
+    "action_type",
+    "field_name",
+    "old_value",
+    "new_value",
+    "actor",
+    "context_notes",
+    "is_critical",
+    "transition_warning",
+    "created_at",
+)
+
+
+def _audit_export_where(range_key: str, application_id: int | None) -> tuple[str, list]:
     created_clause, created_params = analytics_datetime_clause(range_key, "wh.created_at")
     application_clause = ""
     application_params: list = []
     if application_id is not None:
         application_clause = " AND wh.application_id = ?"
         application_params.append(application_id)
+    where_sql = (
+        f"WHERE {non_empty_timestamp_predicate('wh.created_at')}"
+        f"{created_clause}{application_clause}"
+    )
+    return where_sql, [*created_params, *application_params]
 
+
+def count_audit_history_for_export(
+    cursor,
+    range_key: str,
+    application_id: int | None = None,
+) -> int:
+    where_sql, params = _audit_export_where(range_key, application_id)
+    cursor.execute(
+        f"""
+        SELECT COUNT(*)
+        FROM workflow_history wh
+        {where_sql}
+        """,
+        params,
+    )
+    return cursor.fetchone()[0] or 0
+
+
+def iter_audit_history_for_export(
+    cursor,
+    range_key: str,
+    application_id: int | None = None,
+    limit: int = REPORT_EXPORT_MAX_ROWS,
+):
+    where_sql, params = _audit_export_where(range_key, application_id)
     cursor.execute(
         f"""
         SELECT
@@ -97,13 +140,23 @@ def fetch_audit_history_for_export(
             wh.created_at
         FROM workflow_history wh
         LEFT JOIN applications a ON a.id = wh.application_id
-        WHERE wh.created_at IS NOT NULL AND wh.created_at != ''{created_clause}{application_clause}
-        ORDER BY datetime(wh.created_at) DESC, wh.id DESC
+        {where_sql}
+        ORDER BY {datetime_order_expression('wh.created_at')} DESC, wh.id DESC
         LIMIT ?
         """,
-        (*created_params, *application_params, limit),
+        (*params, limit),
     )
-    return [dict(row) for row in cursor.fetchall()]
+    for row in cursor:
+        yield {column: row[column] for column in _AUDIT_EXPORT_COLUMNS}
+
+
+def fetch_audit_history_for_export(
+    cursor,
+    range_key: str,
+    application_id: int | None = None,
+    limit: int = REPORT_EXPORT_MAX_ROWS,
+) -> list[dict]:
+    return list(iter_audit_history_for_export(cursor, range_key, application_id, limit))
 
 
 def fetch_governance_audit_summary(cursor, range_key: str) -> dict:

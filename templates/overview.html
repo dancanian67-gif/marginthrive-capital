@@ -38,6 +38,9 @@
                         ('Active loans', kpis.active_loans, kpi_links.active_loans),
                         ('Overdue loans', kpis.overdue_loans, kpi_links.overdue_loans),
                     ] %}
+                    {% if collections_kpis is defined and operator_can('view_collections') %}
+                    {% set executive_kpis = executive_kpis + [('Collections queue', collections_kpis.queue_total, collections_queue_url)] %}
+                    {% endif %}
                     {% for label, value, href in executive_kpis %}
                     {% include 'partials/dashboard_kpi_link.html' %}
                     {% endfor %}
@@ -45,6 +48,32 @@
             </section>
 
             {% include 'partials/dashboard_portfolio_intelligence.html' %}
+
+            {% if notification_summary is defined and notification_summary %}
+            <section class="dashboard-section">
+                <header class="dashboard-section-header dashboard-section-header-inline">
+                    <h2 class="dashboard-title">Operational notifications</h2>
+                    <a class="dashboard-link" href="{{ url_for('admin_notifications') }}">Open notification center →</a>
+                </header>
+                <div class="dashboard-glass dashboard-card">
+                    <dl class="dashboard-meta">
+                        <div><dt>Unread</dt><dd>{{ notification_summary.unread }}</dd></div>
+                        <div><dt>Critical unread</dt><dd>{{ notification_summary.unread_critical }}</dd></div>
+                        {% if notifications_analytics %}
+                        <div><dt>Ack rate (30d)</dt><dd>{{ notifications_analytics.metrics.acknowledgement_rate_pct }}%</dd></div>
+                        <div><dt>Governance alerts (30d)</dt><dd>{{ notifications_analytics.metrics.governance_alerts_period }}</dd></div>
+                        {% endif %}
+                    </dl>
+                    {% if notification_summary.recent_unread %}
+                    <ul class="dashboard-insight-list">
+                        {% for item in notification_summary.recent_unread %}
+                        <li class="dashboard-severity-{{ item.severity }}">{{ item.title }} <span class="dashboard-muted">· {{ item.created_at }}</span></li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                </div>
+            </section>
+            {% endif %}
 
             <section class="dashboard-section">
                 <header class="dashboard-section-header">

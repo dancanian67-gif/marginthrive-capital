@@ -3,7 +3,7 @@
 from constants.loans import ACTIVE_LOAN_LIFECYCLE_STATUSES
 from constants.portfolio import COLLECTIONS_RISK_LEVELS, DISTRESSED_LOAN_STATUSES, ISSUED_LOAN_STATUSES
 from constants.underwriting import UNDERWRITING_STATUS_LABELS
-from utils.time_range import analytics_datetime_clause
+from services.analytics_query import analytics_datetime_clause
 
 _ACTIVE_IN = ", ".join(f"'{s}'" for s in ACTIVE_LOAN_LIFECYCLE_STATUSES)
 _DISTRESSED_IN = ", ".join(f"'{s}'" for s in DISTRESSED_LOAN_STATUSES)

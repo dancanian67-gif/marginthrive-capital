@@ -891,3 +891,8 @@ def admin_application_workflow(application_id: int):
             "info",
         )
     return redirect(url_for("admin_application_detail", application_id=application_id))
+
+
+from routes.admin_operations import register_phase_routes
+
+register_phase_routes(bp)

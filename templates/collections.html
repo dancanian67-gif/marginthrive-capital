@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% set page_title = page_title|default('Collections Operations') %}
+    {% include 'partials/dashboard_head.html' %}
+</head>
+<body>
+
+<div class="dashboard-page">
+    <div class="dashboard-layout">
+        {% include 'partials/dashboard_nav.html' %}
+
+        <main class="dashboard-shell dashboard-content dashboard-main">
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <h1 class="dashboard-title">Collections Operations</h1>
+                    <p class="dashboard-subtitle">Delinquent account queue, recovery assignments, and follow-up scheduling</p>
+                </header>
+
+                {% include 'partials/dashboard_flash.html' %}
+
+                <div class="dashboard-kpi-grid">
+                    <div class="dashboard-glass dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Queue total</p>
+                        <p class="dashboard-kpi-value">{{ queue_kpis.queue_total }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Urgent priority</p>
+                        <p class="dashboard-kpi-value">{{ queue_kpis.urgent_count }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Follow-ups due</p>
+                        <p class="dashboard-kpi-value">{{ queue_kpis.follow_up_due_count }}</p>
+                    </div>
+                    <div class="dashboard-glass dashboard-kpi-card">
+                        <p class="dashboard-kpi-label">Outstanding exposure</p>
+                        <p class="dashboard-kpi-value">KSh {{ '{:,.0f}'.format(queue_kpis.total_exposure) }}</p>
+                    </div>
+                </div>
+
+                <div class="dashboard-glass dashboard-card dashboard-filters-card">
+                    <h2 class="dashboard-panel-title">Filter queue</h2>
+                    <form class="dashboard-filters-form" method="GET" action="{{ url_for('admin_collections') }}">
+                        <div class="dashboard-filters-grid">
+                            <div class="dashboard-form-row">
+                                <label for="filter-collections-status">Collections status</label>
+                                <select id="filter-collections-status" name="collections_status">
+                                    <option value="">All statuses</option>
+                                    {% for status in collections_statuses %}
+                                    <option value="{{ status }}" {% if filters.collections_status == status %}selected{% endif %}>
+                                        {{ collections_status_labels.get(status, status) }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="filter-collections-priority">Priority</label>
+                                <select id="filter-collections-priority" name="collections_priority">
+                                    <option value="">All priorities</option>
+                                    {% for priority in collections_priorities %}
+                                    <option value="{{ priority }}" {% if filters.collections_priority == priority %}selected{% endif %}>
+                                        {{ collections_priority_labels.get(priority, priority) }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="filter-delinquency-bucket">Delinquency bucket</label>
+                                <select id="filter-delinquency-bucket" name="delinquency_bucket">
+                                    <option value="">All buckets</option>
+                                    {% for bucket in delinquency_buckets %}
+                                    <option value="{{ bucket }}" {% if filters.delinquency_bucket == bucket %}selected{% endif %}>
+                                        {{ delinquency_bucket_labels.get(bucket, bucket) }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="filter-collections-assigned">Assigned to</label>
+                                <input id="filter-collections-assigned" type="text" name="collections_assigned_to" value="{{ filters.collections_assigned_to }}" placeholder="Officer name">
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="filter-promise">Promise queue</label>
+                                <select id="filter-promise" name="promise_filter">
+                                    <option value="">All queue accounts</option>
+                                    {% for key in promise_queue_filters %}
+                                    <option value="{{ key }}" {% if filters.promise_filter == key %}selected{% endif %}>
+                                        {{ promise_queue_filter_labels.get(key, key) }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="dashboard-form-row">
+                                <label for="filter-collections-q">Search</label>
+                                <input id="filter-collections-q" type="search" name="q" value="{{ filters.q }}" placeholder="Business, owner, loan #">
+                            </div>
+                        </div>
+                        <div class="dashboard-filters-actions">
+                            <button type="submit" class="dashboard-btn-primary">Apply filters</button>
+                            <a class="dashboard-link" href="{{ url_for('admin_collections') }}">Clear</a>
+                        </div>
+                    </form>
+                </div>
+
+                {% if operator_can('export') %}
+                <div class="dashboard-export-bar">
+                    {% set export_links = [
+                        ('Delinquent accounts', export_delinquent_url),
+                        ('Recovery summary', export_recovery_summary_url),
+                        ('Escalation report', export_escalation_url),
+                        ('Officer recovery', export_officer_recovery_url),
+                        ('Aging movement', export_aging_url),
+                        ('Outcome distribution', export_outcome_url),
+                        ('Officer workload', export_workload_url),
+                        ('Overdue exposure', export_exposure_url),
+                        ('Active promises', export_active_promises_url),
+                        ('Broken promises', export_broken_promises_url),
+                        ('Overdue promises', export_overdue_promises_url),
+                    ] %}
+                    {% set export_title = 'Collections exports' %}
+                    {% include 'partials/dashboard_export_actions.html' %}
+                </div>
+                {% endif %}
+
+                <div class="dashboard-glass dashboard-card">
+                    <h2 class="dashboard-panel-title">Delinquent account queue ({{ total }})</h2>
+                    {% if queue %}
+                    <div class="dashboard-table-container">
+                        <table class="dashboard-table">
+                            <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Business</th>
+                                <th>Days overdue</th>
+                                <th>Outstanding</th>
+                                <th>Collections status</th>
+                                <th>Priority</th>
+                                <th>Intel. tier</th>
+                                <th>Promise</th>
+                                <th>Assigned</th>
+                                <th>Follow-up</th>
+                                <th></th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            {% for row in queue %}
+                            <tr class="{% if row.follow_up_due %}dashboard-row-attention{% endif %}">
+                                <td>{{ row.id }}</td>
+                                <td>{{ row.business_name }}</td>
+                                <td>
+                                    {{ row.days_overdue }}
+                                    <span class="dashboard-meta">{{ row.delinquency_bucket_label }}</span>
+                                </td>
+                                <td>{{ row.outstanding_balance }}</td>
+                                <td>{{ collections_status_labels.get(row.collections_status, row.collections_status) }}</td>
+                                <td>{{ collections_priority_labels.get(row.collections_priority, row.collections_priority) }}</td>
+                                <td>
+                                    <span class="dashboard-badge {% if row.intelligence_tier == 'critical' %}dashboard-badge-warn{% endif %}">
+                                        {{ row.intelligence_tier_label }}
+                                    </span>
+                                    <span class="dashboard-meta">{{ row.intelligence_score }}</span>
+                                </td>
+                                <td>
+                                    {% if row.has_active_promise %}
+                                    <span class="dashboard-badge">Active</span>
+                                    {% if row.promise_overdue %}<span class="dashboard-badge dashboard-badge-warn">Due</span>{% endif %}
+                                    {% elif row.broken_promise_count %}<span class="dashboard-meta">{{ row.broken_promise_count }} broken</span>
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td>{{ row.collections_assigned_to or '—' }}</td>
+                                <td>
+                                    {% if row.collections_next_follow_up %}
+                                    {{ row.collections_next_follow_up }}{% if row.follow_up_due %} <span class="dashboard-badge dashboard-badge-warn">Due</span>{% endif %}
+                                    {% else %}—{% endif %}
+                                </td>
+                                <td>
+                                    <a class="dashboard-link" href="{{ url_for('admin_collections_detail', application_id=row.id, return=request.full_path) }}">Manage</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% if total_pages > 1 %}
+                    <nav class="dashboard-pagination" aria-label="Collections queue pages">
+                        {% if page > 1 %}
+                        <a class="dashboard-link" href="{{ url_for('admin_collections', page=page - 1, **filter_query) }}">Previous</a>
+                        {% endif %}
+                        <span>Page {{ page }} of {{ total_pages }}</span>
+                        {% if page < total_pages %}
+                        <a class="dashboard-link" href="{{ url_for('admin_collections', page=page + 1, **filter_query) }}">Next</a>
+                        {% endif %}
+                    </nav>
+                    {% endif %}
+                    {% else %}
+                    <p class="dashboard-empty-message">No accounts match the current collections queue filters.</p>
+                    {% endif %}
+                </div>
+            </section>
+        </main>
+    </div>
+</div>
+
+</body>
+</html>

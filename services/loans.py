@@ -27,6 +27,12 @@ from constants.loans import (
 )
 from repositories.database import get_db_connection
 from repositories.loans import insert_loan_account_history_record, insert_repayment_record
+from utils.db_write import commit_connection
+from utils.governance import (
+    append_governance_context,
+    governance_context_for_loan_lifecycle,
+    governance_context_for_repayment,
+)
 from utils.ops_logging import log_governance_event, log_workflow_failure
 
 
@@ -334,6 +340,10 @@ def persist_loan_account_update(
 
     batch_id = secrets.token_hex(8)
     is_critical = 1 if after["loan_lifecycle_status"] in LOAN_LIFECYCLE_CRITICAL_STATUSES else 0
+    lifecycle_tag = governance_context_for_loan_lifecycle(after["loan_lifecycle_status"])
+    if lifecycle_tag:
+        context_notes = append_governance_context(context_notes, lifecycle_tag)
+    audit_context = context_notes[:MAX_LOAN_ACCOUNT_CONTEXT_LENGTH]
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -380,7 +390,7 @@ def persist_loan_account_update(
             batch_id=batch_id,
             snapshot=after,
             actor=actor,
-            context_notes=context_notes[:MAX_LOAN_ACCOUNT_CONTEXT_LENGTH],
+            context_notes=audit_context,
             is_critical=is_critical,
         )
 
@@ -423,13 +433,13 @@ def persist_loan_account_update(
                     previous_state,
                     new_state,
                     actor,
-                    context_notes[:MAX_LOAN_ACCOUNT_CONTEXT_LENGTH],
+                    audit_context,
                     field_critical,
                     None,
                 ),
             )
 
-        conn.commit()
+        commit_connection(conn, operation_name="loan_account_update_commit")
     except Exception as exc:
         conn.rollback()
         log_workflow_failure(
@@ -550,6 +560,10 @@ def persist_repayment(
             f"Payment {repayment['payment_amount']} on {repayment['payment_date']}; "
             f"balance {balance_before} → {balance_after}"
         )
+        repayment_context = append_governance_context(
+            repayment["repayment_notes"] or summary,
+            governance_context_for_repayment(),
+        )
         cursor.execute(
             """
             INSERT INTO workflow_history (
@@ -579,13 +593,13 @@ def persist_repayment(
                 str(balance_before),
                 str(balance_after),
                 actor,
-                repayment["repayment_notes"] or summary,
+                repayment_context[:MAX_LOAN_ACCOUNT_CONTEXT_LENGTH],
                 0,
                 None,
             ),
         )
 
-        conn.commit()
+        commit_connection(conn, operation_name="repayment_record_commit")
     except Exception as exc:
         conn.rollback()
         log_workflow_failure(
@@ -597,6 +611,16 @@ def persist_repayment(
         raise
     finally:
         conn.close()
+
+    from services.operational_events import emit_repayment_recorded_event, session_operator_id
+
+    emit_repayment_recorded_event(
+        application_id=application_id,
+        actor=actor,
+        operator_id=session_operator_id(),
+        payment_amount=repayment["payment_amount"],
+        batch_id=batch_id,
+    )
 
     return {
         "balance_after": balance_after,

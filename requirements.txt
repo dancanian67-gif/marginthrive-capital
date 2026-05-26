@@ -1,3 +1,6 @@
+# MarginThrive Capital — runtime dependencies
+# Werkzeug is installed automatically as a Flask dependency.
+
 Flask==3.0.3
 python-dotenv==1.0.1
 gunicorn==22.0.0

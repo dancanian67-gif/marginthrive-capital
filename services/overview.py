@@ -12,4 +12,5 @@ def overview_drilldown_links() -> dict[str, str]:
         "awaiting_client_action": url_for("admin", preset="awaiting_client"),
         "active_loans": url_for("admin", preset="active_loans"),
         "overdue_loans": url_for("admin", preset="overdue_loans"),
+        "collections_queue": url_for("admin.admin_collections"),
     }

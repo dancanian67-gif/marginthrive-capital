@@ -119,6 +119,7 @@
 
                 <div class="dashboard-glass dashboard-card dashboard-workflow-form-card">
                     <h2 class="dashboard-panel-title">Quick actions</h2>
+                    {% if operator_can('mutate_workflow') %}
                     <div class="dashboard-quick-actions">
                         {% if next_pipeline_status %}
                         <form method="POST" action="{{ url_for('admin_application_workflow', application_id=application['id']) }}" class="dashboard-quick-action-form">
@@ -158,8 +159,12 @@
                         </form>
                         {% endif %}
                     </div>
+                    {% else %}
+                    <p class="dashboard-muted">Workflow updates require review officer, operations manager, or administrator access.</p>
+                    {% endif %}
 
                     <h2 class="dashboard-panel-title dashboard-panel-title-spaced">Workflow update</h2>
+                    {% if operator_can('mutate_workflow') %}
                     <form
                         class="dashboard-form"
                         method="POST"
@@ -272,6 +277,9 @@
                             <a class="dashboard-btn-secondary" href="{{ list_return_url }}">Cancel</a>
                         </div>
                     </form>
+                    {% else %}
+                    <p class="dashboard-muted">You have read-only access to workflow fields for this application.</p>
+                    {% endif %}
                 </div>
             </section>
         </main>

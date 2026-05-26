@@ -3,101 +3,78 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>MarginThrive Capital</title>
-
-<!-- CSS -->
 <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
-
-<!-- ICONS -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap" rel="stylesheet">
 </head>
 
-<body>
+<body class="public-page">
 
-<!-- NAVBAR -->
 <header class="navbar">
     <div class="logo">Margin<span>Thrive</span></div>
-
     <nav>
         <a class="active">Home</a>
         <a href="#about">About Us</a>
-        <a href="#products">Our Solutions</a>
+        <a href="#products">Products and services</a>
         <a href="#process">How It Works</a>
         <a href="#contact">Contact</a>
     </nav>
-
-    <button class="nav-btn" onclick="scrollToSection('apply')">Apply Now</button>
+    <button class="nav-btn" type="button" onclick="scrollToSection('apply')">Apply Now</button>
 </header>
 
-<!-- HERO -->
 <section class="hero">
-
-    <!-- BACKGROUND LOGO -->
-    <img src="{{ url_for('static', filename='logo.png') }}" class="hero-logo">
-
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="" class="hero-logo" aria-hidden="true">
     <div class="hero-left reveal">
+        <p class="hero-eyebrow">Profit-aligned financing for growing businesses</p>
         <h1>
-            Borrow Based on <span>Profit</span>, Not Pressure
+            Growing your <span>profit</span>, sustaining your future
         </h1>
-
-        <p>
+        <p class="hero-lead">
             Financing that grows with your business.
             Repay based on real profits, not unrealistic expectations.
         </p>
-
         <div class="hero-buttons">
-            <button class="primary" onclick="scrollToSection('apply')">
+            <button class="primary" type="button" onclick="scrollToSection('apply')">
                 Apply for Financing →
             </button>
-            <button class="secondary">
+            <button class="secondary" type="button">
                 Watch Overview
             </button>
         </div>
-
         <div class="hero-features">
-            <span><i class="fas fa-lock"></i> Secure & Confidential</span>
+            <span><i class="fas fa-lock"></i> Secure &amp; Confidential</span>
             <span><i class="fas fa-bolt"></i> Fast Approval</span>
-            <span><i class="fas fa-users"></i> 5000+ Businesses Trusted</span>
+            <span><i class="fas fa-users"></i> 5,000+ Businesses Trusted</span>
         </div>
     </div>
-
 </section>
 
-<!-- STATS -->
-<section class="stats reveal">
+<section class="stats reveal" aria-label="Key metrics">
     <div class="stat">
         <h3>10+</h3>
         <p>Years Experience</p>
     </div>
-
     <div class="stat">
         <h3>5,000+</h3>
         <p>Businesses Supported</p>
     </div>
-
     <div class="stat">
         <h3>95%</h3>
         <p>Client Retention</p>
     </div>
-
     <div class="stat">
-        <h3>₦10B+</h3>
+        <h3>KSh 10B+</h3>
         <p>Financing Disbursed</p>
     </div>
 </section>
 
-<!-- MAIN SECTION -->
-<section class="main reveal">
-
-    <!-- LEFT -->
+<section class="main reveal" id="about">
     <div class="left">
-
         <h2>Why Choose MarginThrive</h2>
-
         <div class="why">
-
             <div class="why-item reveal">
                 <i class="fas fa-chart-line"></i>
                 <div>
@@ -105,15 +82,13 @@
                     <p>Repayments aligned with your profits</p>
                 </div>
             </div>
-
             <div class="why-item reveal">
                 <i class="fas fa-handshake"></i>
                 <div>
-                    <h4>Transparent & Fair</h4>
+                    <h4>Transparent &amp; Fair</h4>
                     <p>No hidden fees. Clear terms.</p>
                 </div>
             </div>
-
             <div class="why-item reveal">
                 <i class="fas fa-rocket"></i>
                 <div>
@@ -121,7 +96,6 @@
                     <p>We help you scale sustainably</p>
                 </div>
             </div>
-
             <div class="why-item reveal">
                 <i class="fas fa-book"></i>
                 <div>
@@ -129,101 +103,84 @@
                     <p>Access to tools and insights</p>
                 </div>
             </div>
-
         </div>
 
         <h2 id="products">Our Financing Solutions</h2>
-
         <div class="cards">
-
             <div class="card reveal">
-                <h3>MarginPro Facility</h3>
-                <p>For stable businesses with consistent margins</p>
+                <h3>Haraka Loan</h3>
+                <p>KES 2,000 – KES 5,000 for quick working capital</p>
             </div>
-
             <div class="card reveal">
-                <h3>HustleBoost Facility</h3>
-                <p>Fuel for scaling businesses</p>
+                <h3>Daraja Loan</h3>
+                <p>KES 6,000 – KES 15,000 for steady growth</p>
             </div>
-
             <div class="card reveal">
-                <h3>QuickBridge Facility</h3>
-                <p>Short-term financial support</p>
+                <h3>Faida Loan</h3>
+                <p>KES 16,000 – KES 25,000 for expansion</p>
             </div>
-
         </div>
-
     </div>
 
-    <!-- RIGHT FORM -->
-    <div class="right">
-
+    <div class="right" id="apply">
+        <p class="form-eyebrow">Start your application</p>
         <h2>Apply for Financing</h2>
+        <p class="form-subtitle">Complete the form below. Our team will review your request promptly.</p>
 
         <form action="/apply" method="POST" class="form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-            <input type="text" name="business_name" placeholder="Business Name" required>
+            <label class="sr-only" for="business_name">Business Name</label>
+            <input type="text" id="business_name" name="business_name" placeholder="Business Name" required>
 
-            <input type="text" name="owner_name" placeholder="Owner Name" required>
+            <label class="sr-only" for="owner_name">Owner Name</label>
+            <input type="text" id="owner_name" name="owner_name" placeholder="Owner Name" required>
 
-            <input type="email" name="email" placeholder="Email Address" required>
+            <label class="sr-only" for="email">Email Address</label>
+            <input type="email" id="email" name="email" placeholder="Email Address" required>
 
-            <input type="number" name="revenue" placeholder="Monthly Revenue" required>
+            <label class="sr-only" for="revenue">Monthly Revenue</label>
+            <input type="number" id="revenue" name="revenue" placeholder="Monthly Revenue (KSh)" required>
 
-            <select name="product" required>
+            <label class="sr-only" for="product">Product</label>
+            <select id="product" name="product" required>
                 <option value="">Select Product</option>
-                <option>MarginPro</option>
-                <option>HustleBoost</option>
-                <option>QuickBridge</option>
+                <option value="Haraka Loan">Haraka Loan - KES 2,000 - KES 5,000</option>
+                <option value="Daraja Loan">Daraja Loan - KES 6,000 - KES 15,000</option>
+                <option value="Faida Loan">Faida Loan - KES 16,000 - KES 25,000</option>
             </select>
 
             <button type="submit">Submit Application</button>
-
         </form>
-
     </div>
-
 </section>
 
-<!-- PROCESS -->
 <section id="process" class="process reveal">
-
     <h2>How It Works</h2>
-
     <div class="steps">
-
         <div class="step">
             <i class="fas fa-file-alt"></i>
             <p>Apply</p>
         </div>
-
         <div class="step">
             <i class="fas fa-search"></i>
             <p>Analyze</p>
         </div>
-
         <div class="step">
             <i class="fas fa-check-circle"></i>
             <p>Approve</p>
         </div>
-
         <div class="step">
             <i class="fas fa-chart-line"></i>
             <p>Grow</p>
         </div>
-
     </div>
-
 </section>
 
-<!-- FOOTER -->
 <footer id="contact">
     <p>© 2026 MarginThrive Capital — Growing your profit. Sustaining your future.</p>
 </footer>
 
-<!-- JS -->
 <script src="{{ url_for('static', filename='script.js') }}"></script>
-
 </body>
 </html>

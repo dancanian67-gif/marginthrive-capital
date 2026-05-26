@@ -19,6 +19,8 @@ from services.analytics import (
     fetch_analytics_period_kpis,
     fetch_analytics_pipeline_distribution,
 )
+from services.analytics_query import add_distribution_shares, period_rejection_rate
+from services.delinquency import build_collections_analytics_package, collections_insights
 from services.portfolio_intelligence import (
     build_portfolio_intelligence_package,
     portfolio_export_metric_rows,
@@ -79,10 +81,8 @@ def build_reports_page_data(cursor, range_key: str) -> dict:
     portfolio_underwriting = fetch_underwriting_portfolio_distribution(cursor)
     portfolio_loans = fetch_loan_lifecycle_distribution(cursor)
     total_portfolio = portfolio_kpis["total_applications"] or 1
-    for item in portfolio_status:
-        item["share"] = round((item["count"] / total_portfolio) * 100, 1)
-    for item in portfolio_risk:
-        item["share"] = round((item["count"] / total_portfolio) * 100, 1)
+    add_distribution_shares(portfolio_status, total_portfolio)
+    add_distribution_shares(portfolio_risk, total_portfolio)
 
     outcome_summary = {
         "portfolio_approved": portfolio_kpis["approved"],
@@ -93,15 +93,19 @@ def build_reports_page_data(cursor, range_key: str) -> dict:
         "period_pipeline": period_kpis["active_pipeline"],
         "period_total": period_kpis["total_applications"],
     }
-    if period_kpis["total_applications"]:
-        outcome_summary["period_rejection_rate"] = round(
-            (period_kpis["rejected"] / period_kpis["total_applications"]) * 100,
-            1,
-        )
-    else:
-        outcome_summary["period_rejection_rate"] = 0.0
+    outcome_summary["period_rejection_rate"] = period_rejection_rate(
+        period_kpis["rejected"],
+        period_kpis["total_applications"],
+    )
 
     portfolio_intelligence = build_portfolio_intelligence_package(cursor, range_key)
+    collections_analytics = build_collections_analytics_package(cursor, range_key)
+    from services.notification_analytics import (
+        build_notification_analytics_package,
+        notification_analytics_insights,
+    )
+
+    notifications_analytics = build_notification_analytics_package(cursor, range_key)
 
     executive_lines = report_executive_summary(
         portfolio_kpis,
@@ -111,6 +115,8 @@ def build_reports_page_data(cursor, range_key: str) -> dict:
         ANALYTICS_TIME_RANGES[range_key],
     )
     executive_lines.extend(portfolio_intelligence["insights"][:3])
+    executive_lines.extend(collections_insights(collections_analytics)[:2])
+    executive_lines.extend(notification_analytics_insights(notifications_analytics)[:2])
     executive_lines = executive_lines[:8]
 
     return {
@@ -131,6 +137,8 @@ def build_reports_page_data(cursor, range_key: str) -> dict:
         "outcome_summary": outcome_summary,
         "executive_lines": executive_lines,
         "portfolio_intelligence": portfolio_intelligence,
+        "collections_analytics": collections_analytics,
+        "notifications_analytics": notifications_analytics,
     }
 
 
@@ -150,4 +158,23 @@ def report_export_urls(range_key: str, filter_query: dict | None = None) -> dict
         "applications_all": url_for("admin_export_applications", **range_params),
         "repayments": url_for("admin_export_repayments", **filter_params),
         "portfolio": url_for("admin_export_report", report_type="portfolio", **range_params),
+        "collections_delinquent": url_for("admin_export_collections_delinquent"),
+        "collections_activity": url_for("admin_export_collections_activity", **range_params),
+        "collections_workload": url_for("admin_export_collections_workload"),
+        "collections_exposure": url_for("admin_export_collections_exposure"),
+        "collections_recovery_summary": url_for("admin_export_collections_recovery_summary"),
+        "collections_escalation_report": url_for("admin_export_collections_escalation_report"),
+        "collections_officer_recovery": url_for("admin_export_collections_officer_recovery"),
+        "collections_aging_movement": url_for("admin_export_collections_aging_movement"),
+        "collections_outcome_distribution": url_for("admin_export_collections_outcome_distribution"),
+        "promises_active": url_for("admin_export_promises_active"),
+        "promises_broken": url_for("admin_export_promises_broken"),
+        "promises_overdue": url_for("admin_export_promises_overdue"),
+        "promises_officer_performance": url_for("admin_export_promises_officer_performance"),
+        "promises_repayment_conversion": url_for("admin_export_promises_repayment_conversion"),
+        "notifications_alerts": url_for("admin_export_notifications_alerts"),
+        "notifications_unresolved": url_for("admin_export_notifications_unresolved"),
+        "notifications_governance": url_for("admin_export_notifications_governance"),
+        "notifications_ack_metrics": url_for("admin_export_notifications_ack_metrics"),
+        "notifications_critical_events": url_for("admin_export_notifications_critical_events"),
     }

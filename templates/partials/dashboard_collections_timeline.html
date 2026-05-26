@@ -1,0 +1,36 @@
+{% if activity_timeline and activity_timeline.total_events %}
+<div class="dashboard-glass dashboard-card">
+    <h2 class="dashboard-panel-title">Recovery activity timeline</h2>
+
+    {% if activity_timeline.operator_summary %}
+    <div class="dashboard-insight-panel dashboard-overview-insight">
+        <p><strong>Operator activity:</strong>
+            {% for op in activity_timeline.operator_summary %}
+            {{ op.actor }} ({{ op.event_count }}){% if not loop.last %} · {% endif %}
+            {% endfor %}
+        </p>
+    </div>
+    {% endif %}
+
+    {% for category in activity_timeline.category_order %}
+    {% set events = activity_timeline.grouped[category] %}
+    <section class="dashboard-timeline-category">
+        <h3 class="dashboard-panel-subtitle">{{ timeline_category_labels.get(category, category) }}</h3>
+        <ul class="dashboard-timeline">
+            {% for event in events %}
+            <li class="dashboard-timeline-item{% if event.is_critical %} dashboard-timeline-critical{% endif %}">
+                <p class="dashboard-timeline-meta">
+                    {{ event.created_at }} · {{ event.actor }}
+                    <span class="dashboard-badge">{{ event.recovery_badge }}</span>
+                </p>
+                <p><strong>{{ event.headline }}</strong></p>
+                {% if event.context_notes %}
+                <p class="dashboard-timeline-notes">{{ event.context_notes }}</p>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+    </section>
+    {% endfor %}
+</div>
+{% endif %}

@@ -41,4 +41,11 @@ APPLICATIONS_SCHEMA_COLUMNS = (
     ("missed_payment_observations", "TEXT NOT NULL DEFAULT ''"),
     ("repayment_risk_level", "TEXT NOT NULL DEFAULT 'current'"),
     ("last_payment_at", "TEXT"),
+    ("collections_status", "TEXT NOT NULL DEFAULT 'not_in_collections'"),
+    ("collections_priority", "TEXT NOT NULL DEFAULT 'normal'"),
+    ("collections_assigned_to", "TEXT NOT NULL DEFAULT ''"),
+    ("collections_last_contact_at", "TEXT"),
+    ("collections_next_follow_up", "TEXT"),
+    ("collections_notes_summary", "TEXT NOT NULL DEFAULT ''"),
+    ("collections_risk_level", "TEXT NOT NULL DEFAULT 'routine'"),
 )

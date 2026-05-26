@@ -20,6 +20,8 @@ from constants.underwriting import (
 )
 from repositories.database import get_db_connection
 from repositories.underwriting import insert_underwriting_decision_record
+from utils.db_write import commit_connection
+from utils.governance import append_governance_context, log_underwriting_governance
 from utils.ops_logging import log_governance_event, log_workflow_failure
 
 
@@ -190,6 +192,16 @@ def persist_underwriting_update(
     batch_id = secrets.token_hex(8)
     is_critical = 1 if after["underwriting_status"] in UNDERWRITING_CRITICAL_STATUSES else 0
     reviewed_at_expr = "datetime('now')"
+    previous_status = before.get("underwriting_status")
+    if after["underwriting_status"] in UNDERWRITING_CRITICAL_STATUSES:
+        from constants.governance import GOV_TAG_UNDERWRITING_ESCALATION, GOV_TAG_UNDERWRITING_REJECTION
+
+        tag = (
+            GOV_TAG_UNDERWRITING_REJECTION
+            if after["underwriting_status"] == "rejected"
+            else GOV_TAG_UNDERWRITING_ESCALATION
+        )
+        context_notes = append_governance_context(context_notes, tag)
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -287,7 +299,7 @@ def persist_underwriting_update(
                 ),
             )
 
-        conn.commit()
+        commit_connection(conn, operation_name="underwriting_update_commit")
     except Exception as exc:
         conn.rollback()
         log_workflow_failure(
@@ -300,13 +312,28 @@ def persist_underwriting_update(
     finally:
         conn.close()
 
-    if is_critical:
-        log_governance_event(
-            "Critical underwriting decision recorded",
-            critical=True,
+    log_underwriting_governance(
+        application_id=application_id,
+        actor=actor,
+        underwriting_status=after["underwriting_status"],
+        previous_status=previous_status,
+    )
+
+    if after["underwriting_status"] != previous_status:
+        from constants.governance import GOV_TAG_UNDERWRITING_ESCALATION, GOV_TAG_UNDERWRITING_REJECTION
+        from services.operational_events import emit_underwriting_decision_event, session_operator_id
+
+        gov_tag = None
+        if after["underwriting_status"] == "rejected":
+            gov_tag = GOV_TAG_UNDERWRITING_REJECTION
+        elif after["underwriting_status"] in UNDERWRITING_CRITICAL_STATUSES:
+            gov_tag = GOV_TAG_UNDERWRITING_ESCALATION
+        emit_underwriting_decision_event(
             application_id=application_id,
             actor=actor,
+            operator_id=session_operator_id(),
             underwriting_status=after["underwriting_status"],
+            governance_tag=gov_tag,
             batch_id=batch_id,
         )
 

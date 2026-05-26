@@ -1,13 +1,12 @@
 from functools import wraps
 
-from flask import Response, g, redirect, request, session, url_for
+from flask import g, redirect, request, session, url_for
 
 from constants.operators import (
     SESSION_OPERATOR_DISPLAY_NAME,
     SESSION_OPERATOR_ID,
     SESSION_OPERATOR_ROLE,
     SESSION_OPERATOR_USERNAME,
-    can_manage_operators,
     role_label,
 )
 from repositories.database import get_db_connection
@@ -103,13 +102,6 @@ def require_admin_auth(route_fn):
 
 def require_administrator(route_fn):
     """Require administrator role for operator management actions."""
+    from utils.permissions import require_administrator as _require_administrator
 
-    @wraps(route_fn)
-    @require_admin_auth
-    def wrapper(*args, **kwargs):
-        operator = getattr(g, "operator", None)
-        if not operator or not can_manage_operators(operator["role"]):
-            return Response("Administrator access required.", status=403)
-        return route_fn(*args, **kwargs)
-
-    return wrapper
+    return _require_administrator(route_fn)

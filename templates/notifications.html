@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% set page_title = page_title|default('Operational Notifications') %}
+    {% include 'partials/dashboard_head.html' %}
+</head>
+<body>
+
+<div class="dashboard-page">
+    <div class="dashboard-layout">
+        {% include 'partials/dashboard_nav.html' %}
+
+        <main class="dashboard-shell dashboard-content dashboard-main">
+            <section class="dashboard-section">
+                <header class="dashboard-section-header">
+                    <h1 class="dashboard-title">Operational Notifications</h1>
+                    <p class="dashboard-subtitle">
+                        Internal event awareness · {{ summary.unread }} unread
+                        {% if summary.unread_critical %}· {{ summary.unread_critical }} critical{% endif %}
+                    </p>
+                </header>
+
+                {% include 'partials/dashboard_flash.html' %}
+
+                {% if operational_alerts %}
+                <div class="dashboard-insight-panel">
+                    <h2 class="dashboard-panel-title">Operational alerts</h2>
+                    <ul class="dashboard-insight-list">
+                        {% for alert in operational_alerts %}
+                        <li class="dashboard-severity-{{ alert.severity }}">
+                            <strong>{{ alert.title }}</strong> — {{ alert.message }}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+
+                <form method="GET" action="{{ url_for('admin_notifications') }}" class="dashboard-filter-bar">
+                    <label for="filter">Filter</label>
+                    <select id="filter" name="filter" onchange="this.form.submit()">
+                        {% for key in filters %}
+                        <option value="{{ key }}"{% if filter == key %} selected{% endif %}>
+                            {{ filter_labels[key] }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </form>
+
+                <div class="dashboard-table-wrap dashboard-glass">
+                    <table class="dashboard-table">
+                        <thead>
+                        <tr>
+                            <th>Severity</th>
+                            <th>Category</th>
+                            <th>Title</th>
+                            <th>Application</th>
+                            <th>Created</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for item in notifications %}
+                        <tr class="dashboard-severity-{{ item.severity }}{% if item.is_acknowledged %} dashboard-row-muted{% endif %}">
+                            <td>
+                                <span class="dashboard-badge dashboard-badge-risk-{{ 'critical' if item.severity == 'critical' else 'high' if item.severity == 'warning' else 'low' }}">
+                                    {{ item.severity_label }}
+                                </span>
+                            </td>
+                            <td>{{ item.category_label }}</td>
+                            <td>
+                                <strong>{{ item.title }}</strong>
+                                {% if item.message %}
+                                <p class="dashboard-table-subtext">{{ item.message[:160] }}{% if item.message|length > 160 %}…{% endif %}</p>
+                                {% endif %}
+                                {% if item.governance_tag %}
+                                <p class="dashboard-table-subtext">{{ item.governance_tag }}</p>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if item.application_id %}
+                                <a class="dashboard-link" href="{{ url_for('admin_collections_detail', application_id=item.application_id) }}">
+                                    #{{ item.application_id }}{% if item.business_name %} · {{ item.business_name }}{% endif %}
+                                </a>
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
+                            <td>{{ item.created_at }}</td>
+                            <td>
+                                {% if item.is_acknowledged %}
+                                Acknowledged
+                                {% else %}
+                                Unread
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if not item.is_acknowledged %}
+                                <form method="POST" action="{{ url_for('admin_notification_acknowledge', notification_id=item.id) }}">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <button type="submit" class="dashboard-btn-secondary dashboard-btn-compact">Acknowledge</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7">No notifications match this filter.</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                {% if page_count > 1 %}
+                <nav class="dashboard-pagination" aria-label="Notification pages">
+                    {% if has_prev %}
+                    <a class="dashboard-link" href="{{ url_for('admin_notifications', filter=filter, page=page - 1) }}">Previous</a>
+                    {% endif %}
+                    <span>Page {{ page }} of {{ page_count }}</span>
+                    {% if has_next %}
+                    <a class="dashboard-link" href="{{ url_for('admin_notifications', filter=filter, page=page + 1) }}">Next</a>
+                    {% endif %}
+                </nav>
+                {% endif %}
+            </section>
+        </main>
+    </div>
+</div>
+
+</body>
+</html>

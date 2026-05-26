@@ -65,13 +65,61 @@ On boot, the platform validates:
 - production `SECRET_KEY` strength
 - database directory writability
 - required SQLite tables
+- performance index presence (warns if missing; `init_db()` creates them)
+- SQLite WAL journal mode (warns if not WAL)
+- backup directory availability (warns if missing or not writable; auto-creates `backups/` when possible)
+- operator account sanity (active administrators, duplicate usernames)
 - presence of operator accounts (warns if none)
 
 Critical misconfiguration in production prevents startup via `ensure_production_ready()`.
 
+## Phase E2 operational warnings
+
+The following are logged only (`marginthrive.ops`, `operational.warning`) and do not block requests:
+
+- Export row counts at or above 5,000 rows
+- Export generation slower than 5 seconds (measured when streaming completes)
+- Analytics ranges `all` or `90d` on heavy queries
+- SQLite `SQLITE_BUSY` retries on workflow commits
+- Missing or unwritable optional directories
+
 ## Login protection
 
 Failed sign-in attempts are tracked in memory per client/IP and identity. After repeated failures, login is temporarily locked (`LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCKOUT_SECONDS`). Restarting the process clears lockout state — use a reverse proxy rate limit for stronger protection at scale.
+
+## Phase E4 diagnostics & regression
+
+```bash
+python tools/operational_diagnostics.py
+python tools/integrity_check.py
+python tools/smoke_test.py
+python tools/deployment_checklist.py
+```
+
+Smoke tests use a **temporary SQLite database** and do not modify your development `database.db`.
+
+### Startup flow
+
+1. Environment validation (`utils/env.py`)
+2. `init_db()` migrations and indexes
+3. `run_startup_integrity_checks()` — tables, WAL, operators, governance orphans, integrity checks
+4. Non-critical issues log as `operational.warning`; production misconfiguration fails fast via `ensure_production_ready()`
+
+### RBAC (Phase E3)
+
+Roles: `administrator`, `operations_manager`, `review_officer`, `analyst`.  
+Enforcement: `utils/permissions.py` · Matrix: `constants/permissions.py`.
+
+### Governance regression checks
+
+Non-destructive SQL checks in `utils/integrity_checks.py`:
+
+- Orphaned audit / repayment references
+- Actor attribution on governance tables
+- Underwriting field consistency
+- Repayment balance continuity
+- Export type / threshold configuration
+- Workflow status validity
 
 ## Incident checklist
 

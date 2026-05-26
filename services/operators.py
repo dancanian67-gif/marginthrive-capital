@@ -11,6 +11,8 @@ from constants.operators import (
     is_valid_operator_role,
 )
 from repositories.database import get_db_connection
+from utils.db_write import commit_connection
+from utils.governance import governance_context_for_operator_deactivation, log_admin_only_operation
 from repositories.operators import (
     count_active_administrators,
     create_operator_record,
@@ -87,7 +89,7 @@ def create_operator(data) -> tuple[int | None, str | None]:
     cursor = conn.cursor()
     try:
         operator_id = create_operator_record(cursor, **payload)
-        conn.commit()
+        commit_connection(conn, operation_name="operator_create")
         return operator_id, None
     finally:
         conn.close()
@@ -110,7 +112,7 @@ def change_operator_role(operator_id: int, role: str, acting_operator_id: int) -
     try:
         if not update_operator_role(cursor, operator_id, role):
             return "Operator not found."
-        conn.commit()
+        commit_connection(conn, operation_name="operator_role_update")
         return None
     finally:
         conn.close()
@@ -141,7 +143,14 @@ def set_operator_status(
 
         if not set_operator_active(cursor, operator_id, active):
             return "Operator not found."
-        conn.commit()
+        commit_connection(conn, operation_name="operator_status_update")
+        if not active:
+            log_admin_only_operation(
+                action="operator_deactivated",
+                actor=str(acting_operator_id),
+                target_operator_id=operator_id,
+                governance_tag=governance_context_for_operator_deactivation(),
+            )
         return None
     finally:
         conn.close()

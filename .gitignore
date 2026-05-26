@@ -1,13 +1,82 @@
-# Local environment files
+﻿# --- Environment & secrets ---
 .env
+.env.*
+!.env.example
 
-# Python cache artifacts
+# --- Python ---
 __pycache__/
 *.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+*.cover
+*.py,cover
 
-# Local SQLite database file
+# --- Virtual environments ---
+venv/
+env/
+.venv/
+ENV/
+env.bak/
+venv.bak/
+
+# --- Flask ---
+instance/
+.webassets-cache
+flask_session/
+
+# --- SQLite & local data ---
+*.db
+*.sqlite
+*.sqlite3
 database.db
+database.db-journal
+database.db-wal
+database.db-shm
 
-# Operational artifacts (Phase D1)
+# --- Operational artifacts ---
 backups/
 logs/
+*.log
+
+# --- Editors & IDE ---
+.vscode/
+.cursor/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- OS & misc ---
+*.tmp
+*.temp
+*.bak

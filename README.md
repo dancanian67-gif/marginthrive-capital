@@ -1,99 +1,166 @@
 # MarginThrive Capital
 
-Minimal Flask app for financing applications and admin review.
+A Flask-based financing operations platform for business loan applications, operator workflows, underwriting, loan servicing, collections, and executive reporting. Built for internal operator teams with session-based authentication, governance audit trails, and SQLite-backed persistence.
 
-## Quick start
+## Features
 
-1. Create and activate a virtual environment.
-2. Install dependencies:
-   - `pip install -r requirements.txt`
-3. Copy `.env.example` to `.env` and set secure values (`SECRET_KEY`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`). On first startup, these bootstrap the initial administrator operator account when no operators exist yet.
-4. Run:
-   - `python app.py`
+- **Public intake** — Business financing application form with CSRF protection
+- **Operator authentication** — Session sign-in, role-based access, login lockout protection
+- **Applications dashboard** — Pipeline filters, workflow updates, officer assignment, KPI views
+- **Underwriting & loan servicing** — Structured assessments, lifecycle tracking, manual repayments
+- **Collections & recovery** — Delinquency queue, promises, prioritization, recovery analytics
+- **Notifications** — Operational alert center with acknowledgement workflow
+- **Analytics & reports** — Trends, portfolio intelligence, governed CSV exports
+- **Production readiness** — Health checks, structured logging, backups, integrity diagnostics
 
-## Project structure (Phase C1–C2)
+## Requirements
+
+- Python 3.11+ (3.12+ recommended)
+- pip
+
+## Installation
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/YOUR_ORG/marginthrive-capital.git
+cd marginthrive-capital
+```
+
+### 2. Create a virtual environment
+
+**Windows (PowerShell):**
+
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+```
+
+**macOS / Linux:**
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+### 3. Install dependencies
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 4. Configure environment variables
+
+Copy the example file and edit values for your environment:
+
+```bash
+cp .env.example .env
+```
+
+Required for production:
+
+| Variable | Description |
+|----------|-------------|
+| `SECRET_KEY` | Long random secret (32+ characters) |
+| `APP_ENV` | `development` or `production` |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | Bootstrap first administrator when no operators exist |
+
+See [.env.example](.env.example) for optional settings (database path, logging, backups, proxy).
+
+### 5. Run the application
+
+**Development:**
+
+```bash
+python app.py
+```
+
+Open [http://127.0.0.1:5000/](http://127.0.0.1:5000/) for the public application form.
+
+**Production (WSGI):**
+
+```bash
+gunicorn -w 4 -b 0.0.0.0:8000 wsgi:application
+```
+
+Use a TLS reverse proxy in production. See [docs/OPERATIONS.md](docs/OPERATIONS.md).
+
+## Admin access
+
+1. Start the app and open **`/admin/login`**.
+2. Sign in with your operator credentials.
+3. On first run, set `ADMIN_USERNAME` and `ADMIN_PASSWORD` in `.env` before startup to create the initial administrator account.
+
+> **Placeholder:** Document your organization’s operator onboarding process, password policy, and production admin URL here before sharing the repository publicly.
+
+Default bootstrap credentials in `.env.example` are for local development only — never use them in production.
+
+## Screenshots
+
+> **Placeholder:** Add screenshots for the public application page, admin overview, applications dashboard, collections workspace, and analytics.
+
+| View | Path |
+|------|------|
+| Public application | `/` |
+| Admin overview | `/admin/overview` |
+| Applications | `/admin` |
+| Collections | `/admin/collections` |
+| Analytics | `/admin/analytics` |
+
+Suggested location: `docs/screenshots/` (add image files locally; they are optional for the repo).
+
+## Project structure
 
 ```
-app.py                 # Entry point
-factory.py             # Flask app factory
-template_helpers.py    # Jinja template globals
-constants/             # Domain, workflow, analytics, audit, reporting, operator constants
-config/                # Environment-aware Flask configuration
-utils/                 # Logging, auth, CSRF, env validation, backup, error handling
-repositories/          # SQLite access (applications, audit, officers, operators, database init)
-services/              # Workflow, audit, analytics, reporting, filters, intake, operators
-routes/                # HTTP routes (public, auth, admin, operators blueprints)
-templates/             # Jinja templates and partials
+app.py                 # Development entry point
+wsgi.py                # Production WSGI entry point
+factory.py             # Flask app factory & context processors
+config/                # Environment-aware configuration
+constants/             # Domain, workflow, permissions, reporting constants
+repositories/          # SQLite data access
+services/              # Business logic (workflow, audit, analytics, collections, …)
+routes/                # HTTP blueprints (public, auth, admin, operators, health)
+templates/             # Jinja templates and dashboard partials
+static/                # CSS, JavaScript, assets
+utils/                 # Auth, CSRF, logging, backups, diagnostics helpers
+tools/                 # Backup, integrity, smoke test, deployment utilities
+operational_tests/     # Lightweight regression smoke tests
+docs/                  # Operations, workflow schema, diagnostics guides
 ```
 
-## Environment variables
+## Health checks
 
-- `APP_ENV` - `development` or `production`
-- `FLASK_ENV` - optional Flask env setting
-- `FLASK_DEBUG` - `true`/`false` debug toggle (effective in development)
-- `SECRET_KEY` - required, must be strong in production
-- `ADMIN_USERNAME` / `ADMIN_PASSWORD` - bootstrap the first administrator when the `operators` table is empty
-- `ADMIN_EMAIL` / `ADMIN_DISPLAY_NAME` - optional bootstrap profile fields
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /health` | Liveness |
+| `GET /health/ready` | Database readiness |
 
-## Operator authentication (Phase C2)
+## Operational tools
 
-- `/admin/login` — session-based operator sign-in (replaces HTTP Basic Auth)
-- `/admin/logout` — POST sign-out
-- `/admin/operators` — administrator-only operator account management
-- Passwords are stored as Werkzeug password hashes; sessions expire after 8 hours of inactivity
-- Workflow audit history, exports, and governance views attribute actions to the signed-in operator (`display_name (username)` when set)
-- Operational roles: `administrator`, `review_officer`, `analyst`, `operations_manager` (all active operators retain access to existing operational routes; only administrators manage operator accounts)
+```bash
+python tools/backup_database.py
+python tools/operational_diagnostics.py
+python tools/integrity_check.py
+python tools/smoke_test.py
+python tools/deployment_checklist.py
+```
 
-## Production readiness (Phase D1)
+See [docs/DIAGNOSTICS.md](docs/DIAGNOSTICS.md) and [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
-- **WSGI entrypoint:** `wsgi:application` (see [docs/OPERATIONS.md](docs/OPERATIONS.md))
-- **Health checks:** `GET /health` (live), `GET /health/ready` (database readiness)
-- **Operational logging:** structured `marginthrive.ops` logger (`LOG_LEVEL`, optional `LOG_FILE`)
-- **Backups:** `python tools/backup_database.py`
-- **Login protection:** in-memory lockout after repeated failed sign-ins
+## Documentation
 
-Deploy with Gunicorn behind a TLS reverse proxy. Set `APP_ENV=production`, a strong `SECRET_KEY`, and `TRUST_PROXY=true` when using a proxy.
+- [Workflow schema & audit trail](docs/WORKFLOW_SCHEMA.md)
+- [Operations & deployment](docs/OPERATIONS.md)
+- [Diagnostics & smoke tests](docs/DIAGNOSTICS.md)
+- [Dashboard components](docs/DASHBOARD_COMPONENTS.md)
 
-## Production notes
+## Security notes
 
-- Do not run with debug enabled in production.
-- Set a strong `SECRET_KEY` and bootstrap or provision operator accounts.
-- Keep `.env` out of version control.
-- See [docs/OPERATIONS.md](docs/OPERATIONS.md) for backup, recovery, and incident guidance.
+- Never commit `.env`, `database.db`, `backups/`, or `logs/`.
+- Use strong `SECRET_KEY` and unique operator passwords in production.
+- Deploy behind HTTPS with `APP_ENV=production` and `TRUST_PROXY=true` when using a reverse proxy.
 
-## Workflow schema (Phase A1)
+## License
 
-Applications support operational fields (`status`, `sub_status`, timestamps, risk, officer assignment, etc.). See [docs/WORKFLOW_SCHEMA.md](docs/WORKFLOW_SCHEMA.md). On startup, `init_db()` migrates existing SQLite databases in place without deleting rows.
-
-## Operational audit (Phase B2)
-
-Workflow changes are recorded in `workflow_history` with operator attribution, optional governance notes, and a timeline on each application detail page. See [docs/WORKFLOW_SCHEMA.md](docs/WORKFLOW_SCHEMA.md#operational-audit-trail-phase-b2).
-
-## Underwriting & financing decisions (Phase D2)
-
-Application review includes a dedicated **Underwriting & financing decision** panel on each application detail page. Operators record structured assessments (affordability, repayment confidence, business stability, documentation quality), financing decision status, rationale, and escalation context. Decisions are stored on the application, versioned in `underwriting_decisions`, and mirrored into the governance audit trail separately from pipeline workflow status.
-
-## Loan servicing & repayments (Phase D3)
-
-Active loan operations are tracked separately from pipeline workflow and financing decisions:
-
-- **Loan lifecycle** on each application: `not_issued` (default), `active`, `repaying`, `overdue`, `completed`, `defaulted`, `written_off`
-- **Loan account fields**: account number, issued/outstanding amounts, repayment progress, schedule (issue/due dates, installment, frequency), collections notes, repayment risk level
-- **`repayments` table**: manual payment records with balance before/after and operator attribution
-- **`loan_account_history` table**: versioned loan account snapshots (mirrors underwriting pattern)
-- **Governance**: loan lifecycle changes and repayments write to `workflow_history` with dedicated action types
-- **Visibility**: application detail servicing panel, dashboard filters/presets (`active_loans`, `overdue_loans`), overview KPIs, analytics distribution, CSV exports (applications + `/admin/export/repayments`)
-
-No payment gateways, mobile money, or customer portals — operators enter repayments manually.
-
-## Portfolio intelligence (Phase E1)
-
-Executive and analytics views combine **operational KPIs** (pipeline, fraud, officers) with **portfolio financial KPIs** (issued/repaid capital, outstanding balances, overdue and collections exposure, delinquency ratio, portfolio aging).
-
-- **Overview** and **Analytics** include a Portfolio intelligence section; period metrics respect the analytics time range on Analytics/Reports.
-- **CSV export:** `GET /admin/export/report/portfolio?range=30d` — financial metrics, aging buckets, collections workload.
-- Calculations are read-only SQL over `applications` and `repayments` — no new tables, no external BI.
-
-## Reports & exports (Phase B3)
-
-Operational reports and CSV exports are available at `/admin/reports`, with filtered application exports from `/admin` and audit exports from application detail. See [docs/WORKFLOW_SCHEMA.md](docs/WORKFLOW_SCHEMA.md#operational-reports--exports-phase-b3).
+> **Placeholder:** Add your license (e.g. MIT, proprietary) before publishing.

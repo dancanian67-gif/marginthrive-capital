@@ -30,6 +30,10 @@
                     ('Operational report pack', export_urls.operational),
                     ('Audit history', export_urls.audit),
                     ('Officer workload', export_urls.officers),
+                    ('Collections delinquent', export_urls.collections_delinquent),
+                    ('Collections activity', export_urls.collections_activity),
+                    ('Recovery summary', export_urls.collections_recovery_summary),
+                    ('Escalation report', export_urls.collections_escalation_report),
                 ] %}
                 {% set export_title = 'Export analytics period' %}
                 {% include 'partials/dashboard_export_actions.html' %}
@@ -200,6 +204,71 @@
                             <a class="dashboard-link" href="{{ url_for('admin', preset='overdue_loans') }}">Overdue →</a>
                         </p>
                     </div>
+
+                    {% if notifications_analytics %}
+                    <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+                        <h3 class="dashboard-panel-title">Operational notifications</h3>
+                        <dl class="dashboard-meta">
+                            <div><dt>Period notifications</dt><dd>{{ notifications_analytics.metrics.total_period }}</dd></div>
+                            <div><dt>Unresolved (period)</dt><dd>{{ notifications_analytics.metrics.unresolved_period }}</dd></div>
+                            <div><dt>Acknowledgement rate</dt><dd>{{ notifications_analytics.metrics.acknowledgement_rate_pct }}%</dd></div>
+                            <div><dt>Aging critical</dt><dd>{{ notifications_analytics.metrics.aging_critical_unresolved }}</dd></div>
+                        </dl>
+                        <p class="dashboard-overview-footnote">
+                            <a class="dashboard-link" href="{{ url_for('admin_notifications') }}">Notification center →</a>
+                            {% if export_urls.notifications_unresolved is defined %}
+                            · <a class="dashboard-link" href="{{ export_urls.notifications_unresolved }}">Export unresolved</a>
+                            {% endif %}
+                        </p>
+                    </div>
+                    {% endif %}
+
+                    {% if collections_analytics and collections_analytics.promises %}
+                    <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+                        <h3 class="dashboard-panel-title">Promise-to-pay intelligence</h3>
+                        <dl class="dashboard-meta">
+                            <div><dt>Active promises</dt><dd>{{ collections_analytics.promises.metrics.active_promises }}</dd></div>
+                            <div><dt>Fulfillment rate</dt><dd>{{ collections_analytics.promises.metrics.fulfillment_rate_pct }}%</dd></div>
+                            <div><dt>Broken rate</dt><dd>{{ collections_analytics.promises.metrics.broken_rate_pct }}%</dd></div>
+                            <div><dt>Repayment conversion</dt><dd>{{ collections_analytics.promises.metrics.repayment_conversion_pct }}%</dd></div>
+                        </dl>
+                    </div>
+                    {% endif %}
+
+                    {% if collections_analytics and collections_analytics.recovery %}
+                    <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+                        <h3 class="dashboard-panel-title">Recovery intelligence</h3>
+                        <dl class="dashboard-meta">
+                            <div><dt>Recovery rate (queue)</dt><dd>{{ collections_analytics.recovery.recovery.recovery_rate_pct }}%</dd></div>
+                            <div><dt>Period resolutions</dt><dd>{{ collections_analytics.recovery.recovery.period_resolutions }}</dd></div>
+                            <div><dt>Recovered exposure</dt><dd>KSh {{ '{:,.0f}'.format(collections_analytics.recovery.recovery.resolved_exposure) }}</dd></div>
+                            <div><dt>Write-off exposure</dt><dd>KSh {{ '{:,.0f}'.format(collections_analytics.recovery.recovery.writeoff_exposure) }}</dd></div>
+                            <div><dt>30d repayments</dt><dd>KSh {{ '{:,.0f}'.format(collections_analytics.recovery.velocity.total_recovered_30d) }}</dd></div>
+                            <div><dt>Promise-to-pay</dt><dd>{{ collections_analytics.recovery.recovery.promise_to_pay_count }}</dd></div>
+                        </dl>
+                    </div>
+                    {% endif %}
+
+                    {% if collections_analytics %}
+                    <div class="dashboard-glass dashboard-card dashboard-analytics-container">
+                        <h3 class="dashboard-panel-title">Collections &amp; delinquency (live queue)</h3>
+                        <div class="dashboard-insight-panel dashboard-overview-insight">
+                            <p>
+                                <strong>{{ collections_analytics.kpis.queue_total }}</strong> accounts in queue ·
+                                <strong>{{ collections_analytics.kpis.follow_up_due_count }}</strong> follow-ups due ·
+                                exposure <strong>KSh {{ '{:,.0f}'.format(collections_analytics.kpis.total_exposure) }}</strong>
+                            </p>
+                        </div>
+                        <div class="dashboard-chart-frame dashboard-chart-frame-list">
+                            {% with items=collections_analytics.delinquency_distribution, empty_message='No delinquent accounts in queue.' %}
+                            {% include 'partials/dashboard_distribution_chart.html' %}
+                            {% endwith %}
+                        </div>
+                        <p class="dashboard-overview-footnote">
+                            <a class="dashboard-link" href="{{ url_for('admin_collections') }}">Open collections workspace →</a>
+                        </p>
+                    </div>
+                    {% endif %}
                 </div>
 
                 <div class="dashboard-overview-grid">

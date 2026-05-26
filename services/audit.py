@@ -23,6 +23,8 @@ from repositories.database import get_db_connection
 from repositories.officers import ensure_officer_registered
 from services.workflow import is_allowed_status_transition
 from utils.ops_logging import log_governance_event, log_workflow_failure
+from utils.db_write import commit_connection
+from utils.governance import log_high_risk_workflow_override
 
 def workflow_snapshot_from_row(row: sqlite3.Row | dict) -> dict:
     return {
@@ -306,7 +308,7 @@ def persist_workflow_update(
             context_notes=context_notes,
             transition_warning=transition_warning,
         )
-        conn.commit()
+        commit_connection(conn, operation_name="workflow_update_commit")
     except Exception as exc:
         conn.rollback()
         log_workflow_failure(
@@ -320,6 +322,13 @@ def persist_workflow_update(
     finally:
         conn.close()
 
+    if transition_warning:
+        log_high_risk_workflow_override(
+            application_id=application_id,
+            actor=actor,
+            transition_warning=transition_warning,
+            batch_id=batch_id,
+        )
     if any(workflow_change_is_critical(field, old, new) for field, old, new in changes):
         log_governance_event(
             "Critical workflow change recorded",
@@ -328,6 +337,19 @@ def persist_workflow_update(
             actor=actor,
             batch_id=batch_id,
         )
+
+    from services.operational_events import emit_workflow_transition_event, session_operator_id
+
+    is_critical = any(workflow_change_is_critical(field, old, new) for field, old, new in changes)
+    emit_workflow_transition_event(
+        application_id=application_id,
+        actor=actor,
+        operator_id=session_operator_id(),
+        status=after["status"],
+        risk_level=after["risk_level"],
+        is_critical=is_critical,
+        batch_id=batch_id,
+    )
 
 
 def group_workflow_history_batches(rows: list) -> list[dict]:

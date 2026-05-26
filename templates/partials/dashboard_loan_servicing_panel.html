@@ -106,6 +106,7 @@
     </div>
     {% endif %}
 
+    {% if operator_can('mutate_loan_account') %}
     <form
         class="dashboard-form dashboard-loan-form"
         method="POST"
@@ -202,8 +203,11 @@
             <button type="submit" class="dashboard-btn-primary">Save loan account</button>
         </div>
     </form>
+    {% else %}
+    <p class="dashboard-muted">Loan account updates require operations manager or administrator access.</p>
+    {% endif %}
 
-    {% if application['loan_lifecycle_status'] in ['active', 'repaying', 'overdue', 'defaulted'] %}
+    {% if application['loan_lifecycle_status'] in ['active', 'repaying', 'overdue', 'defaulted'] and operator_can('mutate_repayments') %}
     <form
         class="dashboard-form dashboard-loan-repayment-form"
         method="POST"
@@ -232,5 +236,7 @@
             <button type="submit" class="dashboard-btn-secondary">Record repayment</button>
         </div>
     </form>
+    {% elif application['loan_lifecycle_status'] in ['active', 'repaying', 'overdue', 'defaulted'] %}
+    <p class="dashboard-muted">Repayment recording requires operations manager or administrator access.</p>
     {% endif %}
 </div>
