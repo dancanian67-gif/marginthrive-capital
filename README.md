@@ -81,10 +81,80 @@ Open [http://127.0.0.1:5000/](http://127.0.0.1:5000/) for the public application
 **Production (WSGI):**
 
 ```bash
-gunicorn -w 4 -b 0.0.0.0:8000 wsgi:application
+gunicorn --bind 0.0.0.0:${PORT:-8000} wsgi:application
 ```
 
 Use a TLS reverse proxy in production. See [docs/OPERATIONS.md](docs/OPERATIONS.md).
+
+## Deploy on Render
+
+Render runs the app via the included `Procfile` and `wsgi:application` entry point. SQLite remains the database; attach a **persistent disk** for production data.
+
+### 1. Create a Web Service
+
+1. [Render Dashboard](https://dashboard.render.com/) → **New** → **Web Service**.
+2. Connect your GitHub repository.
+3. **Environment:** Python 3.
+4. **Build command:** `pip install -r requirements.txt`
+5. **Start command:** (auto-detected from `Procfile`)
+
+```text
+gunicorn --bind 0.0.0.0:$PORT wsgi:application
+```
+
+### 2. Add a persistent disk (recommended)
+
+Without a disk, SQLite data lives on ephemeral storage and is lost on redeploy.
+
+1. In the service → **Disks** → **Add disk**.
+2. Mount path: `/var/data`
+3. Size: 1 GB or more.
+
+The app uses `/var/data/database.db` on Render when `RENDER` is set and that mount exists. Override with `DATABASE_PATH` if needed.
+
+### 3. Environment variables
+
+| Variable | Required | Example / notes |
+|----------|----------|-----------------|
+| `APP_ENV` | Yes | `production` |
+| `SECRET_KEY` | Yes | 32+ character random string |
+| `TRUST_PROXY` | Yes | `true` (Render terminates TLS) |
+| `FLASK_DEBUG` | Yes | `false` |
+| `ADMIN_USERNAME` | Bootstrap | Set before first deploy if DB is empty |
+| `ADMIN_PASSWORD` | Bootstrap | Strong password; remove from env after bootstrap if desired |
+| `DATABASE_PATH` | Optional | `/var/data/database.db` (default with disk) |
+| `SESSION_COOKIE_SECURE` | Optional | `true` (default in production) |
+| `FORCE_HTTPS` | Optional | `true` (default in production) |
+| `GUNICORN_WORKERS` | Optional | `2` (free tier) |
+| `GUNICORN_TIMEOUT` | Optional | `120` (large exports) |
+
+Render sets `PORT` automatically — do not hardcode it in the start command.
+
+### 4. Health checks
+
+| Path | Type | Use |
+|------|------|-----|
+| `/health` | Liveness | Process is up |
+| `/health/ready` | Readiness | Database and schema ready (503 if degraded) |
+
+Configure **Health Check Path** to `/health/ready` for zero-downtime deploys.
+
+### 5. Verify after deploy
+
+- Public form: `https://<your-service>.onrender.com/`
+- Admin login: `https://<your-service>.onrender.com/admin/login`
+- Health: `https://<your-service>.onrender.com/health`
+
+### 6. Local production smoke test (before push)
+
+```bash
+export APP_ENV=production
+export SECRET_KEY="your-local-test-secret-at-least-32-chars"
+export TRUST_PROXY=true
+export FLASK_DEBUG=false
+export PORT=8000
+gunicorn --bind 0.0.0.0:$PORT wsgi:application
+```
 
 ## Admin access
 

@@ -47,11 +47,16 @@ def validate_environment(*, strict: bool = False) -> list[str]:
     elif not secret_key:
         issues.append("SECRET_KEY is not set; using development fallback.")
 
-    database_path = os.getenv("DATABASE_PATH", "database.db")
+    from constants.app import DATABASE_PATH
+
+    database_path = DATABASE_PATH
     database_dir = os.path.dirname(os.path.abspath(database_path)) or "."
     if not os.path.isdir(database_dir):
-        issues.append(f"Database directory does not exist: {database_dir}")
-    elif not os.access(database_dir, os.W_OK):
+        try:
+            os.makedirs(database_dir, exist_ok=True)
+        except OSError as exc:
+            issues.append(f"Database directory does not exist and could not be created: {database_dir} ({exc})")
+    if os.path.isdir(database_dir) and not os.access(database_dir, os.W_OK):
         issues.append(f"Database directory is not writable: {database_dir}")
 
     if strict and issues:

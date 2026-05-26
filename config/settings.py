@@ -16,6 +16,8 @@ def configure_app(app) -> None:
     if is_production():
         app.config["DEBUG"] = False
         app.config["TESTING"] = False
+        # Never honor FLASK_DEBUG in production (e.g. Render dashboard misconfiguration).
+        app.config["ENV"] = "production"
         app.config["SESSION_COOKIE_SECURE"] = get_bool_env("SESSION_COOKIE_SECURE", default=True)
         app.config["PREFERRED_URL_SCHEME"] = "https" if get_bool_env("FORCE_HTTPS", default=True) else "http"
     else:

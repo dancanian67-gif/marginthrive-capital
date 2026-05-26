@@ -1,3 +1,4 @@
+import os
 import sqlite3
 
 from constants.app import DATABASE_PATH
@@ -15,7 +16,11 @@ def configure_sqlite_connection(conn: sqlite3.Connection) -> None:
 
 
 def get_db_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(DATABASE_PATH)
+    database_path = os.path.abspath(DATABASE_PATH)
+    database_dir = os.path.dirname(database_path)
+    if database_dir:
+        os.makedirs(database_dir, exist_ok=True)
+    conn = sqlite3.connect(database_path)
     conn.row_factory = sqlite3.Row
     configure_sqlite_connection(conn)
     return conn
