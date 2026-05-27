@@ -83,7 +83,7 @@ def apply():
                     data["business_name"].strip(),
                     data["owner_name"].strip(),
                     data["email"].strip(),
-                    data["phone_number"].strip().replace(" ", ""),
+                    form_phone_number,
                     data["revenue"],
                     data["product"].strip(),
                     DEFAULT_APPLICATION_STATUS,
