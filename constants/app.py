@@ -1,4 +1,5 @@
-import osimport re
+import os
+import re
 
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 #
