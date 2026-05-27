@@ -1,5 +1,4 @@
-import os
-import re
+import osimport re
 
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 #
@@ -15,7 +14,7 @@ ALLOWED_PRODUCTS = {
     "QuickBridge",
 }
 
-RENDER_PERSISTENT_DATA_DIR = "/var/data"
+RENDER_DISK_PATH = "/opt/render/project/src/data"
 
 
 def resolve_database_path() -> str:
@@ -25,15 +24,7 @@ def resolve_database_path() -> str:
         return explicit
 
     if os.getenv("RENDER"):
-        persistent_dir = os.getenv("RENDER_DISK_PATH", RENDER_PERSISTENT_DATA_DIR).strip()
-        # Always target the Render persistent mount path.
-        # SQLite and get_db_connection will create the directory on demand.
-        # This avoids multi-worker situations where some workers fall back to
-        # ephemeral storage if the mount isn't detected at boot.
-        if persistent_dir:
-            return os.path.join(persistent_dir, "database.db")
-        # Extreme fallback: local relative database file.
-        return "database.db"
+        return os.path.join(RENDER_DISK_PATH, "database.db")
 
     return "database.db"
 
