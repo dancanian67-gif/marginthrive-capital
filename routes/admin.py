@@ -115,7 +115,12 @@ from utils.csv_export import distribution_export_rows, make_csv_response, make_s
 from utils.csrf import ensure_session_csrf_token, validate_csrf
 from utils.errors import flash_operational_error
 from utils.operational import log_admin_export
-from utils.ops_logging import log_workflow_failure
+from utils.ops_logging import (
+    log_db_retrieval_count,
+    log_dashboard_query_failed,
+    log_dashboard_query_result,
+    log_workflow_failure,
+)
 from utils.time_range import parse_analytics_range
 
 bp = Blueprint("admin", __name__)
@@ -147,6 +152,16 @@ def admin_overview():
     pipeline_denominator = pipeline_total or 1
     for item in pipeline_backlog:
         item["share"] = round((item["count"] / pipeline_denominator) * 100, 1)
+
+    log_dashboard_query_result(
+        "Admin overview query results",
+        total_applications=kpis.get("total_applications", 0),
+        status_distribution=len(status_distribution),
+        risk_distribution=len(risk_distribution),
+        pipeline_backlog_total=pipeline_total,
+        recent_count=len(recent_applications),
+        attention_count=len(attention_applications),
+    )
 
     return render_template(
         "overview.html",
@@ -206,6 +221,20 @@ def admin_analytics():
 
     insights = analytics_insights(period_kpis, backlog, officer_workload, pipeline_distribution)
     insights = (portfolio["insights"] + insights)[:8]
+
+    log_dashboard_query_result(
+        "Admin analytics query results",
+        range_key=range_key,
+        total_applications=period_kpis.get("total_applications", 0),
+        intake_points=len(intake_trend),
+        fraud_points=len(fraud_trend),
+        outcome_points=len(outcome_trend),
+        status_distribution=len(status_distribution),
+        risk_distribution=len(risk_distribution),
+        pipeline_cases=len(pipeline_distribution),
+        officer_workload=len(officer_workload),
+        backlog_total=backlog.get("pipeline_total", 0),
+    )
 
     return render_template(
         "analytics.html",
@@ -538,6 +567,16 @@ def admin():
     )
     applications = cursor.fetchall()
     conn.close()
+
+    log_db_retrieval_count(
+        "Admin applications list query results",
+        preset=filters.get("preset", ""),
+        filters_active=filters_have_constraints(filters),
+        page=page,
+        page_size=ADMIN_PAGE_SIZE,
+        fetched_count=len(applications),
+        total_matching=total_matching,
+    )
 
     pagination = {
         "page": page,

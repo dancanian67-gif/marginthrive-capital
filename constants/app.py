@@ -2,7 +2,18 @@ import os
 import re
 
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-ALLOWED_PRODUCTS = {"MarginPro", "HustleBoost", "QuickBridge"}
+#
+# Public intake product options must match backend validation.
+# Keep legacy product values for backwards compatibility.
+ALLOWED_PRODUCTS = {
+    "Haraka Loan",
+    "Daraja Loan",
+    "Faida Loan",
+    # legacy/internal values (older frontend variants)
+    "MarginPro",
+    "HustleBoost",
+    "QuickBridge",
+}
 
 RENDER_PERSISTENT_DATA_DIR = "/var/data"
 
@@ -15,10 +26,14 @@ def resolve_database_path() -> str:
 
     if os.getenv("RENDER"):
         persistent_dir = os.getenv("RENDER_DISK_PATH", RENDER_PERSISTENT_DATA_DIR).strip()
-        if persistent_dir and os.path.isdir(persistent_dir):
+        # Always target the Render persistent mount path.
+        # SQLite and get_db_connection will create the directory on demand.
+        # This avoids multi-worker situations where some workers fall back to
+        # ephemeral storage if the mount isn't detected at boot.
+        if persistent_dir:
             return os.path.join(persistent_dir, "database.db")
-        data_dir = os.path.join(os.getcwd(), "data")
-        return os.path.join(data_dir, "database.db")
+        # Extreme fallback: local relative database file.
+        return "database.db"
 
     return "database.db"
 

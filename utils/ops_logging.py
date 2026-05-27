@@ -99,3 +99,41 @@ def log_unexpected_exception(message: str, *, exc: BaseException | None = None, 
 
 def log_startup(message: str, **fields: Any) -> None:
     _log(logging.INFO, "startup.check", message, **fields)
+
+
+# ---- Application intake & persistence logging ----
+
+def log_application_submission(message: str, **fields: Any) -> None:
+    _log(logging.INFO, "application.submission", message, **fields)
+
+
+def log_application_submission_rejected(message: str, **fields: Any) -> None:
+    _log(logging.WARNING, "application.submission.rejected", message, **fields)
+
+
+def log_application_persistence_failed(message: str, **fields: Any) -> None:
+    _log(logging.ERROR, "application.persistence.failed", message, **fields)
+
+
+# ---- Database commit logging ----
+
+def log_db_commit(message: str, **fields: Any) -> None:
+    _log(logging.INFO, "database.commit", message, **fields)
+
+
+def log_db_commit_failed(message: str, **fields: Any) -> None:
+    _log(logging.ERROR, "database.commit.failed", message, **fields)
+
+
+def log_db_retrieval_count(message: str, **fields: Any) -> None:
+    _log(logging.INFO, "database.retrieval.counts", message, **fields)
+
+
+# ---- Dashboard query logging ----
+
+def log_dashboard_query_result(message: str, **fields: Any) -> None:
+    _log(logging.INFO, "dashboard.query.results", message, **fields)
+
+
+def log_dashboard_query_failed(message: str, **fields: Any) -> None:
+    _log(logging.ERROR, "dashboard.query.failed", message, **fields)
