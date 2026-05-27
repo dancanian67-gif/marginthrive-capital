@@ -122,6 +122,7 @@ def register_template_globals(app) -> None:
             "fraud_flag_change": "Fraud flag change",
             "officer_assignment": "Officer assignment",
             "notes_update": "Notes update",
+            "applicant_profile_update": "Applicant profile update",
             "loan_lifecycle_change": "Loan lifecycle status",
             "loan_account_update": "Loan account update",
             "loan_terms_change": "Loan terms update",

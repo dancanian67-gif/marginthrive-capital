@@ -15,6 +15,8 @@ SMOKE_ADMIN_USERNAME = "smoke_admin"
 SMOKE_ADMIN_PASSWORD = "SmokeTestAdmin99!"
 SMOKE_ANALYST_USERNAME = "smoke_analyst"
 SMOKE_ANALYST_PASSWORD = "SmokeTestAnalyst99!"
+SMOKE_REVIEW_OFFICER_USERNAME = "smoke_review"
+SMOKE_REVIEW_OFFICER_PASSWORD = "SmokeTestReview99!"
 
 
 def configure_isolated_environment() -> str:
@@ -69,6 +71,27 @@ def seed_analyst_operator(cursor) -> None:
             "smoke_analyst@marginthrive.test",
             generate_password_hash(SMOKE_ANALYST_PASSWORD),
             "Smoke Analyst",
+        ),
+    )
+
+
+def seed_review_officer_operator(cursor) -> None:
+    cursor.execute(
+        "SELECT id FROM operators WHERE username = ? COLLATE NOCASE",
+        (SMOKE_REVIEW_OFFICER_USERNAME,),
+    )
+    if cursor.fetchone():
+        return
+    cursor.execute(
+        """
+        INSERT INTO operators (username, email, password_hash, display_name, role, active)
+        VALUES (?, ?, ?, ?, 'review_officer', 1)
+        """,
+        (
+            SMOKE_REVIEW_OFFICER_USERNAME,
+            "smoke_review@marginthrive.test",
+            generate_password_hash(SMOKE_REVIEW_OFFICER_PASSWORD),
+            "Smoke Review Officer",
         ),
     )
 

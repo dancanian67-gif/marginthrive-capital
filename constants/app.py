@@ -2,6 +2,7 @@ import os
 import re
 
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+KENYAN_PHONE_PATTERN = re.compile(r"^(?:07\d{8}|(?:\+?254)7\d{8})$")
 #
 # Public intake product options must match backend validation.
 # Keep legacy product values for backwards compatibility.

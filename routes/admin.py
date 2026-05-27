@@ -1,6 +1,15 @@
 from flask import Blueprint, Response, flash, g, redirect, render_template, request, url_for
 
 from constants.analytics import ANALYTICS_TIME_RANGES
+from constants.app import EMAIL_PATTERN, KENYAN_PHONE_PATTERN
+from constants.permissions import (
+    PERM_MUTATE_APPLICATION_PROFILE,
+    PERM_MUTATE_LOAN_ACCOUNT,
+    PERM_MUTATE_REPAYMENTS,
+    PERM_MUTATE_UNDERWRITING,
+    PERM_MUTATE_WORKFLOW,
+    PERM_VIEW_OPERATIONS,
+)
 from constants.reporting import (
     APPLICATION_EXPORT_COLUMNS,
     AUDIT_EXPORT_COLUMNS,
@@ -122,8 +131,36 @@ from utils.ops_logging import (
     log_workflow_failure,
 )
 from utils.time_range import parse_analytics_range
+from utils.permissions import operator_has_permission, require_permission
 
 bp = Blueprint("admin", __name__)
+
+
+def _normalize_profile_text(raw_value: str, *, max_length: int) -> str:
+    return (raw_value or "").strip()[:max_length]
+
+
+def _validate_profile_form(form) -> tuple[dict | None, str | None]:
+    owner_name = _normalize_profile_text(form.get("owner_name", ""), max_length=150)
+    email = _normalize_profile_text(form.get("email", ""), max_length=254)
+    phone_number = _normalize_profile_text(form.get("phone_number", ""), max_length=20).replace(" ", "")
+
+    if not owner_name:
+        return None, "Owner name is required."
+    if not email or not EMAIL_PATTERN.match(email):
+        return None, "Enter a valid email address."
+    if not phone_number or not KENYAN_PHONE_PATTERN.match(phone_number):
+        return None, "Enter a valid Kenyan phone number (07XXXXXXXX, 2547XXXXXXXX, or +2547XXXXXXXX)."
+
+    return {
+        "owner_name": owner_name,
+        "email": email,
+        "phone_number": phone_number,
+        "business_type": _normalize_profile_text(form.get("business_type", ""), max_length=120),
+        "date_of_birth": _normalize_profile_text(form.get("date_of_birth", ""), max_length=20),
+        "gender": _normalize_profile_text(form.get("gender", ""), max_length=40),
+        "context_notes": _normalize_profile_text(form.get("profile_context", ""), max_length=1000),
+    }, None
 
 @bp.route("/admin/overview")
 @require_admin_auth
@@ -622,6 +659,7 @@ def admin():
 
 @bp.route("/admin/applications/<int:application_id>")
 @require_admin_auth
+@require_permission(PERM_VIEW_OPERATIONS)
 def admin_application_detail(application_id: int):
     application = fetch_application(application_id)
     if application is None:
@@ -642,9 +680,11 @@ def admin_application_detail(application_id: int):
         application["status"],
         next_status or application["status"],
     )
+    operator = getattr(g, "operator", None)
     return render_template(
         "application_detail.html",
         application=application,
+        can_mutate_application_profile=operator_has_permission(operator, PERM_MUTATE_APPLICATION_PROFILE),
         csrf_token=csrf_token,
         statuses=APPLICATION_STATUSES,
         sub_statuses=APPLICATION_SUB_STATUSES,
@@ -681,8 +721,120 @@ def admin_application_detail(application_id: int):
     )
 
 
+@bp.route("/admin/applications/<int:application_id>/profile", methods=["POST"])
+@require_admin_auth
+@require_permission(PERM_MUTATE_APPLICATION_PROFILE, action="application_profile_update")
+def admin_application_profile(application_id: int):
+    if not validate_csrf(request.form.get("csrf_token", "")):
+        flash("Security check failed. Please try again.", "error")
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    application = fetch_application(application_id)
+    if application is None:
+        return Response("Application not found.", status=404)
+
+    snapshot, validation_error = _validate_profile_form(request.form)
+    if validation_error:
+        flash(validation_error, "error")
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    before_signature = (
+        (application["owner_name"] or "").strip(),
+        (application["email"] or "").strip(),
+        (application["phone_number"] or "").strip(),
+        (application["business_type"] or "").strip(),
+        (application["date_of_birth"] or "").strip(),
+        (application["gender"] or "").strip(),
+    )
+    after_signature = (
+        snapshot["owner_name"],
+        snapshot["email"],
+        snapshot["phone_number"],
+        snapshot["business_type"],
+        snapshot["date_of_birth"],
+        snapshot["gender"],
+    )
+    if before_signature == after_signature:
+        flash("No applicant profile changes were detected.", "info")
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+
+    actor = getattr(g, "admin_actor", get_request_actor())
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            UPDATE applications
+            SET
+                owner_name = ?,
+                email = ?,
+                phone_number = ?,
+                business_type = ?,
+                date_of_birth = ?,
+                gender = ?,
+                updated_at = datetime('now')
+            WHERE id = ?
+            """,
+            (
+                snapshot["owner_name"],
+                snapshot["email"],
+                snapshot["phone_number"],
+                snapshot["business_type"],
+                snapshot["date_of_birth"] or None,
+                snapshot["gender"],
+                application_id,
+            ),
+        )
+        cursor.execute(
+            """
+            INSERT INTO workflow_history (
+                application_id,
+                batch_id,
+                action_type,
+                field_name,
+                old_value,
+                new_value,
+                previous_state,
+                new_state,
+                actor,
+                context_notes,
+                is_critical,
+                transition_warning,
+                created_at
+            )
+            VALUES (?, hex(randomblob(8)), ?, ?, ?, ?, '{}', '{}', ?, ?, 0, NULL, datetime('now'))
+            """,
+            (
+                application_id,
+                "applicant_profile_update",
+                "applicant_profile",
+                "profile",
+                "profile",
+                actor,
+                snapshot["context_notes"],
+            ),
+        )
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        log_workflow_failure(
+            "Applicant profile update could not be saved",
+            application_id=application_id,
+            actor=actor,
+            error=str(exc),
+        )
+        flash_operational_error()
+        return redirect(url_for("admin_application_detail", application_id=application_id))
+    finally:
+        conn.close()
+
+    flash(f"Applicant profile updated for application #{application_id}.", "success")
+    return redirect(url_for("admin_application_detail", application_id=application_id))
+
+
 @bp.route("/admin/applications/<int:application_id>/underwriting", methods=["POST"])
 @require_admin_auth
+@require_permission(PERM_MUTATE_UNDERWRITING, action="underwriting_update")
 def admin_application_underwriting(application_id: int):
     if not validate_csrf(request.form.get("csrf_token", "")):
         flash("Security check failed. Please try again.", "error")
@@ -732,6 +884,7 @@ def admin_application_underwriting(application_id: int):
 
 @bp.route("/admin/applications/<int:application_id>/loan-account", methods=["POST"])
 @require_admin_auth
+@require_permission(PERM_MUTATE_LOAN_ACCOUNT, action="loan_account_update")
 def admin_application_loan_account(application_id: int):
     if not validate_csrf(request.form.get("csrf_token", "")):
         flash("Security check failed. Please try again.", "error")
@@ -781,6 +934,7 @@ def admin_application_loan_account(application_id: int):
 
 @bp.route("/admin/applications/<int:application_id>/repayments", methods=["POST"])
 @require_admin_auth
+@require_permission(PERM_MUTATE_REPAYMENTS, action="repayment_update")
 def admin_application_repayment(application_id: int):
     if not validate_csrf(request.form.get("csrf_token", "")):
         flash("Security check failed. Please try again.", "error")
@@ -845,6 +999,7 @@ def admin_export_repayments():
 
 @bp.route("/admin/applications/<int:application_id>/workflow", methods=["POST"])
 @require_admin_auth
+@require_permission(PERM_MUTATE_WORKFLOW, action="workflow_update")
 def admin_application_workflow(application_id: int):
     if not validate_csrf(request.form.get("csrf_token", "")):
         flash("Security check failed. Please try again.", "error")

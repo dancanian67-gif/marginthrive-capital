@@ -7,6 +7,7 @@ PERM_VIEW_OPERATIONS = "view_operations"
 PERM_VIEW_ANALYTICS = "view_analytics"
 PERM_EXPORT = "export"
 PERM_MUTATE_WORKFLOW = "mutate_workflow"
+PERM_MUTATE_APPLICATION_PROFILE = "mutate_application_profile"
 PERM_MUTATE_UNDERWRITING = "mutate_underwriting"
 PERM_MUTATE_LOAN_ACCOUNT = "mutate_loan_account"
 PERM_MUTATE_REPAYMENTS = "mutate_repayments"
@@ -20,6 +21,7 @@ _ALL_PERMISSIONS = frozenset(
         PERM_VIEW_ANALYTICS,
         PERM_EXPORT,
         PERM_MUTATE_WORKFLOW,
+        PERM_MUTATE_APPLICATION_PROFILE,
         PERM_MUTATE_UNDERWRITING,
         PERM_MUTATE_LOAN_ACCOUNT,
         PERM_MUTATE_REPAYMENTS,
@@ -39,6 +41,7 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
             PERM_VIEW_OPERATIONS,
             PERM_VIEW_ANALYTICS,
             PERM_MUTATE_WORKFLOW,
+            PERM_MUTATE_APPLICATION_PROFILE,
             PERM_MUTATE_UNDERWRITING,
         }
     ),
@@ -57,6 +60,7 @@ PERMISSION_DENIED_MESSAGES: dict[str, str] = {
     PERM_VIEW_ANALYTICS: "You do not have permission to access analytics or reports.",
     PERM_EXPORT: "You do not have permission to export operational data.",
     PERM_MUTATE_WORKFLOW: "Your role cannot update application workflow status.",
+    PERM_MUTATE_APPLICATION_PROFILE: "Your role cannot update applicant profile details.",
     PERM_MUTATE_UNDERWRITING: "Your role cannot record underwriting or financing decisions.",
     PERM_MUTATE_LOAN_ACCOUNT: "Your role cannot update loan account or lifecycle details.",
     PERM_MUTATE_REPAYMENTS: "Your role cannot record or modify repayments.",

@@ -26,6 +26,7 @@ def apply():
     data = request.form
     form_product = (data.get("product") or "").strip()
     form_email = (data.get("email") or "").strip()
+    form_phone_number = (data.get("phone_number") or "").strip()
     email_domain = (form_email.split("@", 1)[1] if "@" in form_email else "")
     revenue_raw = (data.get("revenue") or "").strip()
     business_name = (data.get("business_name") or "").strip()
@@ -35,6 +36,7 @@ def apply():
             "Public intake rejected: CSRF validation failed",
             product=form_product,
             email_domain=email_domain,
+            phone_number=form_phone_number[:20],
             revenue_raw=revenue_raw,
         )
         return redirect("/")
@@ -45,6 +47,7 @@ def apply():
             business_name=business_name[:80],
             product=form_product,
             email_domain=email_domain,
+            phone_number=form_phone_number[:20],
             revenue_raw=revenue_raw,
         )
         return redirect("/")
@@ -54,6 +57,7 @@ def apply():
         business_name=business_name[:80],
         product=form_product,
         email_domain=email_domain,
+        phone_number=form_phone_number[:20],
         revenue_raw=revenue_raw,
         database_path=DATABASE_PATH,
     )
@@ -66,18 +70,20 @@ def apply():
                     business_name,
                     owner_name,
                     email,
+                    phone_number,
                     revenue,
                     product,
                     status,
                     created_at,
                     updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+                VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
                 """,
                 (
                     data["business_name"].strip(),
                     data["owner_name"].strip(),
                     data["email"].strip(),
+                    data["phone_number"].strip().replace(" ", ""),
                     data["revenue"],
                     data["product"].strip(),
                     DEFAULT_APPLICATION_STATUS,
@@ -103,6 +109,7 @@ def apply():
             business_name=business_name[:80],
             product=form_product,
             email_domain=email_domain,
+            phone_number=form_phone_number[:20],
             revenue_raw=revenue_raw,
             database_path=DATABASE_PATH,
         )

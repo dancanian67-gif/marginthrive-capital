@@ -15,6 +15,9 @@ from operational_tests.harness import (
     extract_csrf,
     login_client,
     seed_analyst_operator,
+    seed_review_officer_operator,
+    SMOKE_REVIEW_OFFICER_PASSWORD,
+    SMOKE_REVIEW_OFFICER_USERNAME,
 )
 
 
@@ -40,6 +43,7 @@ class SmokeTestCase(unittest.TestCase):
         cursor = conn.cursor()
         cls.application_id = create_test_application(cursor)
         seed_analyst_operator(cursor)
+        seed_review_officer_operator(cursor)
         conn.commit()
         conn.close()
 
@@ -129,6 +133,48 @@ class RBACTests(SmokeTestCase):
         login_client(self.client, username=SMOKE_ANALYST_USERNAME, password=SMOKE_ANALYST_PASSWORD)
         self.assertEqual(self.client.get("/admin/analytics").status_code, 200)
 
+    def test_review_officer_can_update_applicant_profile(self):
+        from repositories.applications import fetch_application
+
+        login_client(
+            self.client,
+            username=SMOKE_REVIEW_OFFICER_USERNAME,
+            password=SMOKE_REVIEW_OFFICER_PASSWORD,
+        )
+        detail = self.client.get(f"/admin/applications/{self.application_id}")
+        csrf = extract_csrf(detail.get_data(as_text=True))
+        response = self.client.post(
+            f"/admin/applications/{self.application_id}/profile",
+            data={
+                "csrf_token": csrf,
+                "owner_name": "Profile Updated Owner",
+                "email": "profile.updated@test.local",
+                "phone_number": "0712345678",
+                "business_type": "Retail",
+                "gender": "Other",
+                "profile_context": "Smoke profile update",
+            },
+            follow_redirects=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        application = fetch_application(self.application_id)
+        self.assertEqual(application["phone_number"], "0712345678")
+
+    def test_analyst_denied_applicant_profile_mutation(self):
+        login_client(self.client, username=SMOKE_ANALYST_USERNAME, password=SMOKE_ANALYST_PASSWORD)
+        detail = self.client.get(f"/admin/applications/{self.application_id}")
+        csrf = extract_csrf(detail.get_data(as_text=True))
+        response = self.client.post(
+            f"/admin/applications/{self.application_id}/profile",
+            data={
+                "csrf_token": csrf,
+                "owner_name": "Should Fail",
+                "email": "fail@test.local",
+                "phone_number": "0712345678",
+            },
+        )
+        self.assertIn(response.status_code, (302, 403))
+
 
 class WorkflowTests(SmokeTestCase):
     def test_workflow_update_creates_audit(self):
@@ -174,6 +220,38 @@ class WorkflowTests(SmokeTestCase):
         workflow, error = validate_workflow_form({"status": "Not A Real Status"}, app_row)
         self.assertIsNone(workflow)
         self.assertIsNotNone(error)
+
+
+class PublicApplicationPhoneTests(SmokeTestCase):
+    def test_public_submission_persists_phone_number(self):
+        from repositories.database import get_db_connection
+
+        homepage = self.client.get("/")
+        csrf = extract_csrf(homepage.get_data(as_text=True))
+        response = self.client.post(
+            "/apply",
+            data={
+                "csrf_token": csrf,
+                "business_name": "Phone Smoke Business",
+                "owner_name": "Phone Owner",
+                "email": "phone.owner@test.local",
+                "phone_number": "+254712345678",
+                "revenue": "45000",
+                "product": "Haraka Loan",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT phone_number FROM applications WHERE business_name = ? ORDER BY id DESC LIMIT 1",
+            ("Phone Smoke Business",),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        self.assertIsNotNone(row)
+        self.assertEqual(row["phone_number"], "+254712345678")
 
 
 class UnderwritingTests(SmokeTestCase):

@@ -20,6 +20,7 @@ APPLICATION_EXPORT_COLUMNS = (
     ("business_name", "business_name"),
     ("owner_name", "owner_name"),
     ("email", "email"),
+    ("phone_number", "phone_number"),
     ("revenue", "revenue"),
     ("product", "product"),
     ("status", "status"),
