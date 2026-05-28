@@ -18,6 +18,7 @@ REQUIRED_DATABASE_TABLES = (
     "recovery_promise_history",
     "operational_events",
     "operator_notifications",
+    "application_documents",
 )
 
 # Phase G1 — notification operational warning thresholds

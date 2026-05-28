@@ -222,6 +222,43 @@ class WorkflowTests(SmokeTestCase):
         self.assertIsNotNone(error)
 
 
+class ApplicationDocumentationTests(SmokeTestCase):
+    def test_application_detail_renders_documentation_section(self):
+        login_client(self.client, username=SMOKE_ADMIN_USERNAME, password=SMOKE_ADMIN_PASSWORD)
+        response = self.client.get(f"/admin/applications/{self.application_id}")
+        self.assertEqual(response.status_code, 200)
+        body = response.get_data(as_text=True)
+        self.assertIn("Documentation", body)
+        self.assertIn("Identity Documents", body)
+        self.assertIn("Financial Statements", body)
+
+    def test_document_upload_requires_files(self):
+        login_client(self.client, username=SMOKE_ADMIN_USERNAME, password=SMOKE_ADMIN_PASSWORD)
+        detail = self.client.get(f"/admin/applications/{self.application_id}")
+        csrf = extract_csrf(detail.get_data(as_text=True))
+        response = self.client.post(
+            f"/admin/applications/{self.application_id}/documents",
+            data={
+                "csrf_token": csrf,
+                "document_type": "id_documents",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("documentation_panel=open", response.headers.get("Location", ""))
+
+        from repositories.database import get_db_connection
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM application_documents WHERE application_id = ?",
+            (self.application_id,),
+        )
+        count = cursor.fetchone()[0]
+        conn.close()
+        self.assertEqual(count, 0)
+
+
 class PublicApplicationPhoneTests(SmokeTestCase):
     def test_public_submission_persists_phone_number(self):
         from repositories.database import get_db_connection

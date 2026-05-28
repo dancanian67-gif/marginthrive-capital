@@ -149,6 +149,9 @@ def init_db():
     from repositories.notifications import init_operational_notifications_tables
 
     init_operational_notifications_tables(cursor)
+    from repositories.documents import init_application_documents_table
+
+    init_application_documents_table(cursor)
 
     from repositories.indexes import init_performance_indexes
 

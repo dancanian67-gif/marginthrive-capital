@@ -157,10 +157,20 @@
                 </div>
 
                 <div class="dashboard-glass dashboard-card dashboard-workflow-form-card">
-                    <h2 class="dashboard-panel-title">Quick actions</h2>
+                    <h2 class="dashboard-panel-title">Documentation</h2>
                     {% if operator_can('mutate_workflow') %}
                     <div class="dashboard-quick-actions">
-                        {% if next_pipeline_status %}
+                        {% if next_pipeline_status == collection_documentation_status %}
+                        <button
+                            type="button"
+                            class="dashboard-btn-secondary"
+                            id="open-documentation-panel"
+                            aria-expanded="{{ 'true' if documentation_panel_open else 'false' }}"
+                            aria-controls="documentation-upload-panel"
+                        >
+                            Advance to {{ next_pipeline_status }}
+                        </button>
+                        {% elif next_pipeline_status %}
                         <form method="POST" action="{{ url_for('admin_application_workflow', application_id=application['id']) }}" class="dashboard-quick-action-form">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                             <input type="hidden" name="workflow_action" value="advance_status">
@@ -201,6 +211,111 @@
                     {% else %}
                     <p class="dashboard-muted">Workflow updates require review officer, operations manager, or administrator access.</p>
                     {% endif %}
+
+                    <div
+                        id="documentation-upload-panel"
+                        class="dashboard-documentation-panel"
+                        {% if not documentation_panel_open %}hidden{% endif %}
+                    >
+                        {% if next_pipeline_status == collection_documentation_status and operator_can('mutate_workflow') %}
+                        <form method="POST" action="{{ url_for('admin_application_workflow', application_id=application['id']) }}" class="dashboard-documentation-advance-form">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <input type="hidden" name="workflow_action" value="advance_status">
+                            <button type="submit" class="dashboard-btn-primary">Confirm advance to {{ collection_documentation_status }}</button>
+                            <p class="dashboard-field-hint">Upload identity and financial documents below, then confirm the stage advance when ready.</p>
+                        </form>
+                        {% endif %}
+
+                        {% if not cloudinary_configured %}
+                        <div class="dashboard-insight-panel dashboard-attention-banner" role="status">
+                            <p>Document uploads are unavailable until Cloudinary credentials are configured on the server.</p>
+                        </div>
+                        {% endif %}
+
+                        <div class="dashboard-upload-zones">
+                            <section class="dashboard-upload-zone" aria-labelledby="upload-zone-id-title">
+                                <header class="dashboard-upload-zone-header">
+                                    <h3 id="upload-zone-id-title">Identity Documents</h3>
+                                    <p>Upload ID pictures (JPG, PNG)</p>
+                                </header>
+
+                                {% if operator_can('mutate_application_profile') and cloudinary_configured %}
+                                <form
+                                    class="dashboard-upload-form"
+                                    method="POST"
+                                    action="{{ url_for('admin_application_documents', application_id=application['id']) }}"
+                                    enctype="multipart/form-data"
+                                >
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <input type="hidden" name="document_type" value="{{ document_type_id }}">
+                                    <input
+                                        type="file"
+                                        name="files"
+                                        accept="image/jpeg,image/png"
+                                        multiple
+                                        required
+                                    >
+                                    <button type="submit" class="dashboard-btn-secondary">Upload identity documents</button>
+                                </form>
+                                {% endif %}
+
+                                <ul class="dashboard-document-list">
+                                    {% for doc in documents_by_type[document_type_id] %}
+                                    <li class="dashboard-document-item">
+                                        <div class="dashboard-document-item-main">
+                                            <span class="dashboard-document-name">{{ doc['file_name'] }}</span>
+                                            <span class="dashboard-document-meta">{{ doc['uploaded_at'] }} · {{ doc['uploaded_by'] }}</span>
+                                        </div>
+                                        <a class="dashboard-link" href="{{ doc['cloudinary_url'] }}" target="_blank" rel="noopener noreferrer">View / download</a>
+                                    </li>
+                                    {% else %}
+                                    <li class="dashboard-document-empty">No identity documents uploaded yet.</li>
+                                    {% endfor %}
+                                </ul>
+                            </section>
+
+                            <section class="dashboard-upload-zone" aria-labelledby="upload-zone-statements-title">
+                                <header class="dashboard-upload-zone-header">
+                                    <h3 id="upload-zone-statements-title">Financial Statements &amp; M-Pesa Records</h3>
+                                    <p>Upload bank statements, M-Pesa statements or PDFs</p>
+                                </header>
+
+                                {% if operator_can('mutate_application_profile') and cloudinary_configured %}
+                                <form
+                                    class="dashboard-upload-form"
+                                    method="POST"
+                                    action="{{ url_for('admin_application_documents', application_id=application['id']) }}"
+                                    enctype="multipart/form-data"
+                                >
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                                    <input type="hidden" name="document_type" value="{{ document_type_statements }}">
+                                    <input
+                                        type="file"
+                                        name="files"
+                                        accept="application/pdf"
+                                        multiple
+                                        required
+                                    >
+                                    <button type="submit" class="dashboard-btn-secondary">Upload financial statements</button>
+                                </form>
+                                {% endif %}
+
+                                <ul class="dashboard-document-list">
+                                    {% for doc in documents_by_type[document_type_statements] %}
+                                    <li class="dashboard-document-item">
+                                        <div class="dashboard-document-item-main">
+                                            <span class="dashboard-document-name">{{ doc['file_name'] }}</span>
+                                            <span class="dashboard-document-meta">{{ doc['uploaded_at'] }} · {{ doc['uploaded_by'] }}</span>
+                                        </div>
+                                        <a class="dashboard-link" href="{{ doc['cloudinary_url'] }}" target="_blank" rel="noopener noreferrer">View / download</a>
+                                    </li>
+                                    {% else %}
+                                    <li class="dashboard-document-empty">No financial statements uploaded yet.</li>
+                                    {% endfor %}
+                                </ul>
+                            </section>
+                        </div>
+                    </div>
 
                     <h2 class="dashboard-panel-title dashboard-panel-title-spaced">Workflow update</h2>
                     {% if operator_can('mutate_workflow') %}
@@ -324,6 +439,28 @@
         </main>
     </div>
 </div>
+
+<script>
+(function () {
+    const panel = document.getElementById("documentation-upload-panel");
+    const toggleButton = document.getElementById("open-documentation-panel");
+    if (!panel || !toggleButton) {
+        return;
+    }
+
+    const setOpen = (isOpen) => {
+        panel.hidden = !isOpen;
+        toggleButton.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    };
+
+    toggleButton.addEventListener("click", () => {
+        setOpen(panel.hidden);
+        if (!panel.hidden) {
+            panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+    });
+})();
+</script>
 
 </body>
 </html>

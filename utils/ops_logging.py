@@ -115,6 +115,14 @@ def log_application_persistence_failed(message: str, **fields: Any) -> None:
     _log(logging.ERROR, "application.persistence.failed", message, **fields)
 
 
+def log_document_upload(message: str, **fields: Any) -> None:
+    _log(logging.INFO, "document.upload", message, **fields)
+
+
+def log_document_upload_failed(message: str, **fields: Any) -> None:
+    _log(logging.ERROR, "document.upload.failed", message, **fields)
+
+
 # ---- Database commit logging ----
 
 def log_db_commit(message: str, **fields: Any) -> None:

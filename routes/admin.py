@@ -29,6 +29,12 @@ from constants.underwriting import (
     UNDERWRITING_STATUS_LABELS,
     UNDERWRITING_STATUSES,
 )
+from constants.documents import (
+    COLLECTION_DOCUMENTATION_STATUS,
+    DOCUMENT_TYPE_ID,
+    DOCUMENT_TYPE_LABELS,
+    DOCUMENT_TYPE_STATEMENTS,
+)
 from constants.workflow import (
     ADMIN_FILTER_PRESETS,
     ADMIN_PAGE_SIZE,
@@ -50,6 +56,11 @@ from repositories.applications import (
     fetch_status_distribution,
 )
 from repositories.audit import fetch_audit_history_for_export, fetch_workflow_history_rows
+from repositories.documents import (
+    fetch_application_documents,
+    group_documents_by_type,
+    insert_application_document,
+)
 from repositories.database import get_db_connection
 from repositories.loans import (
     fetch_loan_account_history_rows,
@@ -113,6 +124,7 @@ from services.underwriting import (
     persist_underwriting_update,
     validate_underwriting_form,
 )
+from services.documents import cloudinary_configured, process_document_uploads
 from services.workflow import (
     apply_workflow_quick_action,
     application_needs_attention,
@@ -128,6 +140,8 @@ from utils.ops_logging import (
     log_db_retrieval_count,
     log_dashboard_query_failed,
     log_dashboard_query_result,
+    log_document_upload,
+    log_document_upload_failed,
     log_workflow_failure,
 )
 from utils.time_range import parse_analytics_range
@@ -672,7 +686,9 @@ def admin_application_detail(application_id: int):
     loan_history_rows = fetch_loan_account_history_rows(cursor, application_id)
     repayment_rows = fetch_repayment_rows(cursor, application_id)
     officers = fetch_registered_officers(cursor)
+    document_rows = fetch_application_documents(cursor, application_id)
     conn.close()
+    documents_by_type = group_documents_by_type(document_rows)
 
     csrf_token = ensure_session_csrf_token()
     next_status = next_pipeline_status(application["status"])
@@ -718,6 +734,16 @@ def admin_application_detail(application_id: int):
         active_nav="applications",
         page_title=f"Application #{application_id}",
         list_return_url=safe_return_url(request.args.get("return")),
+        documents_by_type=documents_by_type,
+        document_type_id=DOCUMENT_TYPE_ID,
+        document_type_statements=DOCUMENT_TYPE_STATEMENTS,
+        document_type_labels=DOCUMENT_TYPE_LABELS,
+        collection_documentation_status=COLLECTION_DOCUMENTATION_STATUS,
+        documentation_panel_open=(
+            application["status"] == COLLECTION_DOCUMENTATION_STATUS
+            or request.args.get("documentation_panel") == "open"
+        ),
+        cloudinary_configured=cloudinary_configured(),
     )
 
 
@@ -830,6 +856,118 @@ def admin_application_profile(application_id: int):
 
     flash(f"Applicant profile updated for application #{application_id}.", "success")
     return redirect(url_for("admin_application_detail", application_id=application_id))
+
+
+@bp.route("/admin/applications/<int:application_id>/documents", methods=["POST"])
+@require_admin_auth
+@require_permission(PERM_MUTATE_APPLICATION_PROFILE, action="application_document_upload")
+def admin_application_documents(application_id: int):
+    if not validate_csrf(request.form.get("csrf_token", "")):
+        flash("Security check failed. Please try again.", "error")
+        return redirect(
+            url_for(
+                "admin_application_detail",
+                application_id=application_id,
+                documentation_panel="open",
+            )
+        )
+
+    application = fetch_application(application_id)
+    if application is None:
+        return Response("Application not found.", status=404)
+
+    document_type = (request.form.get("document_type") or "").strip()
+    files = request.files.getlist("files")
+    actor = getattr(g, "admin_actor", get_request_actor())
+
+    if not cloudinary_configured():
+        flash("Document uploads are unavailable: Cloudinary is not configured.", "error")
+        return redirect(
+            url_for(
+                "admin_application_detail",
+                application_id=application_id,
+                documentation_panel="open",
+            )
+        )
+
+    uploaded, errors = process_document_uploads(
+        files,
+        application_id=application_id,
+        document_type=document_type,
+        uploaded_by=actor,
+    )
+
+    if errors and not uploaded:
+        flash(errors[0], "error")
+        log_document_upload_failed(
+            "Application document upload rejected",
+            application_id=application_id,
+            actor=actor,
+            document_type=document_type,
+            error_count=len(errors),
+        )
+        return redirect(
+            url_for(
+                "admin_application_detail",
+                application_id=application_id,
+                documentation_panel="open",
+            )
+        )
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        for item in uploaded:
+            insert_application_document(
+                cursor,
+                application_id=application_id,
+                document_type=document_type,
+                file_name=item["file_name"],
+                cloudinary_url=item["cloudinary_url"],
+                cloudinary_public_id=item["cloudinary_public_id"],
+                uploaded_by=actor,
+            )
+        conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        log_document_upload_failed(
+            "Application document metadata could not be saved",
+            application_id=application_id,
+            actor=actor,
+            document_type=document_type,
+            error=str(exc),
+        )
+        flash_operational_error()
+        return redirect(
+            url_for(
+                "admin_application_detail",
+                application_id=application_id,
+                documentation_panel="open",
+            )
+        )
+    finally:
+        conn.close()
+
+    log_document_upload(
+        "Application documents uploaded",
+        application_id=application_id,
+        actor=actor,
+        document_type=document_type,
+        uploaded_count=len(uploaded),
+    )
+
+    label = DOCUMENT_TYPE_LABELS.get(document_type, "Documents")
+    flash(f"{len(uploaded)} {label} file(s) uploaded successfully.", "success")
+    if errors:
+        flash(f"{len(errors)} file(s) could not be uploaded. Check the file type and size.", "warning")
+
+    return redirect(
+        url_for(
+            "admin_application_detail",
+            application_id=application_id,
+            documentation_panel="open",
+        )
+    )
 
 
 @bp.route("/admin/applications/<int:application_id>/underwriting", methods=["POST"])
