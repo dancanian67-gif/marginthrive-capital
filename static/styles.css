@@ -484,6 +484,33 @@ input, select {
     cursor: pointer;
 }
 
+.public-page .consent-check {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    margin: 0.35rem 0 0.9rem;
+    color: #cbd5e1;
+    font-size: 0.88rem;
+    line-height: 1.45;
+}
+
+.public-page .consent-check input[type="checkbox"] {
+    margin-top: 0.2rem;
+    width: auto;
+    accent-color: var(--public-accent);
+}
+
+.public-page .consent-check a,
+.public-page footer a {
+    color: var(--public-accent);
+    text-decoration: none;
+}
+
+.public-page .consent-check a:hover,
+.public-page footer a:hover {
+    color: #4ade80;
+}
+
 .public-page .process {
     text-align: center;
     padding: clamp(3rem, 6vw, 5rem) clamp(1.25rem, 4vw, 3rem);
@@ -518,6 +545,78 @@ input, select {
     border-top: 1px solid var(--public-border);
     color: var(--public-muted);
     font-size: 0.88rem;
+}
+
+.public-page.legal-page .legal-nav-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+
+.public-page.legal-page .legal-content {
+    width: min(900px, 92%);
+    margin: 0 auto;
+    padding: clamp(2rem, 5vw, 4rem) 0;
+}
+
+.public-page.legal-page .legal-content h1 {
+    margin: 0.2rem 0 0.25rem;
+    font-size: clamp(1.9rem, 3.5vw, 2.6rem);
+    letter-spacing: -0.02em;
+}
+
+.public-page.legal-page .legal-last-updated {
+    margin-top: 0;
+    margin-bottom: 2rem;
+    color: var(--public-muted);
+    font-size: 0.88rem;
+}
+
+.public-page.legal-page .legal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 0 0 1.25rem;
+}
+
+.public-page.legal-page .legal-doc-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.55rem 0.95rem;
+    border-radius: 999px;
+    border: 1px solid var(--public-border);
+    text-decoration: none;
+    color: #f8fafc;
+    font-size: 0.86rem;
+    font-weight: 600;
+    transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.public-page.legal-page .legal-doc-link:hover {
+    border-color: rgba(34, 197, 94, 0.45);
+    color: var(--public-accent);
+    background: rgba(34, 197, 94, 0.08);
+}
+
+.public-page.legal-page .legal-content section + section {
+    margin-top: 1.35rem;
+}
+
+.public-page.legal-page .legal-content h2 {
+    margin: 0 0 0.45rem;
+    font-size: 1.1rem;
+}
+
+.public-page.legal-page .legal-content p,
+.public-page.legal-page .legal-content li {
+    color: #cbd5e1;
+}
+
+.public-page.legal-page .legal-content ul {
+    margin: 0.5rem 0 0;
+    padding-left: 1.2rem;
 }
 
 @media (max-width: 900px) {

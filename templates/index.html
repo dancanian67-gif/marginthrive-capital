@@ -21,6 +21,7 @@
         <a href="#products">Products and services</a>
         <a href="#process">How It Works</a>
         <a href="#contact">Contact</a>
+        <a href="{{ url_for('public.privacy_policy') }}">Data Privacy Notice</a>
     </nav>
     <button class="nav-btn" type="button" onclick="scrollToSection('apply')">Apply Now</button>
 </header>
@@ -153,6 +154,11 @@
                 <option value="Faida Loan">Faida Loan - KES 16,000 - KES 25,000</option>
             </select>
 
+            <label class="consent-check" for="privacy_consent">
+                <input type="checkbox" id="privacy_consent" name="privacy_consent" required>
+                <span>I have read and understood the <a href="{{ url_for('public.privacy_policy') }}" target="_blank" rel="noopener noreferrer">MarginThrive Capital Data Privacy Notice</a></span>
+            </label>
+
             <button type="submit">Submit Application</button>
         </form>
     </div>
@@ -181,7 +187,7 @@
 </section>
 
 <footer id="contact">
-    <p>© 2026 MarginThrive Capital — Growing your margins, sustaining your future.</p>
+    <p>© 2026 MarginThrive Capital | <a href="{{ url_for('public.privacy_policy') }}">Data Privacy Notice</a> | <a href="{{ url_for('public.privacy_policy_pdf') }}" target="_blank" rel="noopener noreferrer">Privacy Notice PDF</a> | <a href="{{ url_for('public.terms_and_conditions') }}">Terms &amp; Conditions</a></p>
 </footer>
 
 <script src="{{ url_for('static', filename='script.js') }}"></script>

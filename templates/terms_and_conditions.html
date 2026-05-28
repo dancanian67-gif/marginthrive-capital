@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Terms &amp; Conditions | MarginThrive Capital</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body class="public-page legal-page">
+    <header class="navbar">
+        <div class="logo">MarginThrive <span>Capital</span></div>
+        <nav>
+            <a href="{{ url_for('public.home') }}">Home</a>
+            <a href="{{ url_for('public.privacy_policy') }}">Data Privacy Notice</a>
+            <a href="{{ url_for('public.terms_and_conditions') }}" class="active">Terms &amp; Conditions</a>
+        </nav>
+        <a class="nav-btn legal-nav-btn" href="{{ url_for('public.home') }}#apply">Apply Now</a>
+    </header>
+
+    <main class="legal-content">
+        <p class="hero-eyebrow">Legal and Privacy</p>
+        <h1>Terms &amp; Conditions</h1>
+        <p class="legal-last-updated">Last updated: May 2026</p>
+
+        <section>
+            <h2>1. Scope</h2>
+            <p>
+                These Terms &amp; Conditions govern your use of MarginThrive Capital financing application channels,
+                related digital services, and communications. By using our services, you agree to these terms.
+            </p>
+        </section>
+
+        <section>
+            <h2>2. Application information</h2>
+            <p>
+                You are responsible for ensuring that information submitted in your application is truthful, complete,
+                and current. Submission does not guarantee approval. Financing decisions are based on risk assessment,
+                operational checks, and internal eligibility criteria.
+            </p>
+        </section>
+
+        <section>
+            <h2>3. Financing decisions and obligations</h2>
+            <p>
+                If approved, your financing offer, repayment schedule, and applicable charges will be provided before
+                disbursement. You must review and accept the final offer terms. Late payment, non-payment, or material
+                misrepresentation may trigger collections, account restrictions, or legal remedies where permitted.
+            </p>
+        </section>
+
+        <section>
+            <h2>4. Communications</h2>
+            <p>
+                You agree to receive service-related communications through approved channels, including email or phone,
+                for updates on applications, account actions, repayment reminders, and compliance notifications.
+            </p>
+        </section>
+
+        <section>
+            <h2>5. Data handling</h2>
+            <p>
+                Personal data processing is governed by our <a href="{{ url_for('public.privacy_policy') }}">Data Privacy Notice</a>.
+                MarginThrive Capital applies reasonable technical and organizational safeguards to protect submitted data.
+            </p>
+        </section>
+
+        <section>
+            <h2>6. Service availability and updates</h2>
+            <p>
+                We may update workflows, product criteria, and platform features to improve security, reliability, and
+                compliance. Changes to these terms take effect once published, unless a different effective date is stated.
+            </p>
+        </section>
+
+        <section>
+            <h2>7. Governing framework</h2>
+            <p>
+                These terms are intended to operate in accordance with applicable laws and regulatory obligations in Kenya.
+                If any provision is held unenforceable, remaining provisions continue in effect to the fullest extent allowed.
+            </p>
+        </section>
+    </main>
+
+    <footer>
+        <p>© 2026 MarginThrive Capital | <a href="{{ url_for('public.privacy_policy') }}">Data Privacy Notice</a> | <a href="{{ url_for('public.privacy_policy_pdf') }}" target="_blank" rel="noopener noreferrer">Privacy Notice PDF</a> | <a href="{{ url_for('public.terms_and_conditions') }}">Terms &amp; Conditions</a></p>
+    </footer>
+</body>
+</html>

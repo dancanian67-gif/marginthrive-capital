@@ -238,6 +238,7 @@ class PublicApplicationPhoneTests(SmokeTestCase):
                 "phone_number": "+254712345678",
                 "revenue": "45000",
                 "product": "Haraka Loan",
+                "privacy_consent": "on",
             },
         )
         self.assertEqual(response.status_code, 302)
@@ -252,6 +253,35 @@ class PublicApplicationPhoneTests(SmokeTestCase):
         conn.close()
         self.assertIsNotNone(row)
         self.assertEqual(row["phone_number"], "+254712345678")
+
+    def test_public_submission_requires_privacy_consent(self):
+        from repositories.database import get_db_connection
+
+        homepage = self.client.get("/")
+        csrf = extract_csrf(homepage.get_data(as_text=True))
+        response = self.client.post(
+            "/apply",
+            data={
+                "csrf_token": csrf,
+                "business_name": "No Consent Business",
+                "owner_name": "No Consent Owner",
+                "email": "noconsent@test.local",
+                "phone_number": "+254712345679",
+                "revenue": "12000",
+                "product": "Haraka Loan",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id FROM applications WHERE business_name = ? ORDER BY id DESC LIMIT 1",
+            ("No Consent Business",),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        self.assertIsNone(row)
 
 
 class UnderwritingTests(SmokeTestCase):

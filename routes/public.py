@@ -1,4 +1,6 @@
-from flask import Blueprint, redirect, render_template, request, session
+from pathlib import Path
+
+from flask import Blueprint, abort, redirect, render_template, request, send_from_directory, session
 
 from constants.app import DATABASE_PATH
 from constants.workflow import DEFAULT_APPLICATION_STATUS
@@ -13,12 +15,38 @@ from utils.ops_logging import (
 )
 
 bp = Blueprint("public", __name__)
+LEGAL_DOCS_DIR = Path(__file__).resolve().parent.parent / "docs" / "legal"
+PRIVACY_NOTICE_PDF = "MarginThrive Capital Data Privacy Notice.pdf"
 
 
 @bp.route("/")
 def home():
     csrf_token = ensure_session_csrf_token()
     return render_template("index.html", csrf_token=csrf_token)
+
+
+@bp.route("/privacy-policy")
+def privacy_policy():
+    return render_template("privacy_policy.html")
+
+
+@bp.route("/privacy-policy/pdf")
+def privacy_policy_pdf():
+    pdf_path = LEGAL_DOCS_DIR / PRIVACY_NOTICE_PDF
+    if not pdf_path.exists():
+        abort(404)
+
+    return send_from_directory(
+        LEGAL_DOCS_DIR,
+        PRIVACY_NOTICE_PDF,
+        as_attachment=False,
+        download_name=PRIVACY_NOTICE_PDF,
+    )
+
+
+@bp.route("/terms-and-conditions")
+def terms_and_conditions():
+    return render_template("terms_and_conditions.html")
 
 
 @bp.route("/apply", methods=["POST"])
@@ -30,6 +58,7 @@ def apply():
     email_domain = (form_email.split("@", 1)[1] if "@" in form_email else "")
     revenue_raw = (data.get("revenue") or "").strip()
     business_name = (data.get("business_name") or "").strip()
+    has_privacy_consent = data.get("privacy_consent") == "on"
 
     if not validate_csrf(data.get("csrf_token", "")):
         log_application_submission_rejected(
@@ -42,8 +71,11 @@ def apply():
         return redirect("/")
 
     if not is_valid_application_form(data):
+        rejection_reason = "missing_privacy_consent" if not has_privacy_consent else "invalid_form_fields"
         log_application_submission_rejected(
             "Public intake rejected: form validation failed",
+            rejection_reason=rejection_reason,
+            privacy_consent=has_privacy_consent,
             business_name=business_name[:80],
             product=form_product,
             email_domain=email_domain,
