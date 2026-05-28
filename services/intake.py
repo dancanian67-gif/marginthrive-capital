@@ -7,14 +7,15 @@ def is_valid_application_form(data) -> bool:
     product = (data.get("product") or "").strip()
     phone_number = (data.get("phone_number") or "").strip().replace(" ", "")
     revenue_raw = (data.get("revenue") or "").strip()
-    privacy_consent = data.get("privacy_consent") == "on"
+    legal_consent = data.get("legal_consent") == "on" or data.get("privacy_consent") == "on"
 
     if not business_name or len(business_name) > 150:
         return False
     if not owner_name or len(owner_name) > 150:
         return False
-    if not email or len(email) > 254 or not EMAIL_PATTERN.match(email):
-        return False
+    if email:
+        if len(email) > 254 or not EMAIL_PATTERN.match(email):
+            return False
     if not phone_number or len(phone_number) > 20 or not KENYAN_PHONE_PATTERN.match(phone_number):
         return False
     if product not in ALLOWED_PRODUCTS:
@@ -27,7 +28,7 @@ def is_valid_application_form(data) -> bool:
 
     if revenue <= 0 or revenue > 1_000_000_000:
         return False
-    if not privacy_consent:
+    if not legal_consent:
         return False
 
     return True

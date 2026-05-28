@@ -137,11 +137,11 @@
             <label class="sr-only" for="owner_name">Owner Name</label>
             <input type="text" id="owner_name" name="owner_name" placeholder="Owner Name" required>
 
-            <label class="sr-only" for="email">Email Address</label>
-            <input type="email" id="email" name="email" placeholder="Email Address" required>
+            <label class="sr-only" for="email">Email Address (Optional)</label>
+            <input type="email" id="email" name="email" placeholder="Email Address (Optional)">
 
-            <label class="sr-only" for="phone_number">Phone Number</label>
-            <input type="tel" id="phone_number" name="phone_number" placeholder="Phone Number (07XXXXXXXX or +2547XXXXXXXX)" pattern="(?:07[0-9]{8}|(?:\+?254)7[0-9]{8})" required>
+            <label class="sr-only" for="phone_number">Phone Number (Required)</label>
+            <input type="tel" id="phone_number" name="phone_number" placeholder="Phone Number (Required) — 07XXXXXXXX or +2547XXXXXXXX" pattern="(?:07[0-9]{8}|(?:\+?254)7[0-9]{8})" required>
 
             <label class="sr-only" for="revenue">Monthly Revenue</label>
             <input type="number" id="revenue" name="revenue" placeholder="Monthly Revenue (KSh)" required>
@@ -154,15 +154,28 @@
                 <option value="Faida Loan">Faida Loan - KES 16,000 - KES 25,000</option>
             </select>
 
-            <label class="consent-check" for="privacy_consent">
-                <input type="checkbox" id="privacy_consent" name="privacy_consent" required>
-                <span>I have read and understood the <a href="{{ url_for('public.privacy_policy') }}" target="_blank" rel="noopener noreferrer">MarginThrive Capital Data Privacy Notice</a></span>
+            <label class="consent-check" for="legal_consent">
+                <input type="checkbox" id="legal_consent" name="legal_consent" required>
+                <span>I have read and agree to the <a href="{{ url_for('public.terms_and_conditions') }}" target="_blank" rel="noopener noreferrer">Terms &amp; Conditions</a> and <a href="{{ url_for('public.privacy_policy') }}" target="_blank" rel="noopener noreferrer">Data Privacy Notice</a>.</span>
             </label>
 
             <button type="submit">Submit Application</button>
         </form>
     </div>
 </section>
+
+<div id="application-success-modal" class="public-modal" hidden>
+    <div class="public-modal-backdrop" data-close-modal="true"></div>
+    <section class="public-modal-card" role="dialog" aria-modal="true" aria-labelledby="application-success-title">
+        <button class="public-modal-close" type="button" data-close-modal="true" aria-label="Close success message">×</button>
+        <p class="public-modal-eyebrow">Application Update</p>
+        <h3 id="application-success-title">Application Submitted Successfully</h3>
+        <p>
+            Thank you for applying with MarginThrive Capital. Your application has been received, our review team is underway,
+            and we may contact you shortly.
+        </p>
+    </section>
+</div>
 
 <section id="process" class="process reveal">
     <h2>How It Works</h2>

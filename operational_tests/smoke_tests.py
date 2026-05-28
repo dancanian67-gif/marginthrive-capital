@@ -283,6 +283,68 @@ class PublicApplicationPhoneTests(SmokeTestCase):
         conn.close()
         self.assertIsNone(row)
 
+    def test_public_submission_allows_missing_email(self):
+        from repositories.database import get_db_connection
+
+        homepage = self.client.get("/")
+        csrf = extract_csrf(homepage.get_data(as_text=True))
+        response = self.client.post(
+            "/apply",
+            data={
+                "csrf_token": csrf,
+                "business_name": "No Email Business",
+                "owner_name": "No Email Owner",
+                "phone_number": "+254712345677",
+                "revenue": "52000",
+                "product": "Daraja Loan",
+                "legal_consent": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("application_submitted=1", response.headers.get("Location", ""))
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT email, phone_number FROM applications WHERE business_name = ? ORDER BY id DESC LIMIT 1",
+            ("No Email Business",),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        self.assertIsNotNone(row)
+        self.assertEqual((row["email"] or ""), "")
+        self.assertEqual(row["phone_number"], "+254712345677")
+
+    def test_public_submission_requires_phone_number(self):
+        from repositories.database import get_db_connection
+
+        homepage = self.client.get("/")
+        csrf = extract_csrf(homepage.get_data(as_text=True))
+        response = self.client.post(
+            "/apply",
+            data={
+                "csrf_token": csrf,
+                "business_name": "No Phone Business",
+                "owner_name": "No Phone Owner",
+                "email": "nophone@test.local",
+                "revenue": "18000",
+                "product": "Haraka Loan",
+                "legal_consent": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertNotIn("application_submitted=1", response.headers.get("Location", ""))
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id FROM applications WHERE business_name = ? ORDER BY id DESC LIMIT 1",
+            ("No Phone Business",),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        self.assertIsNone(row)
+
 
 class UnderwritingTests(SmokeTestCase):
     def test_underwriting_save_and_history(self):

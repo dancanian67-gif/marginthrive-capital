@@ -58,7 +58,7 @@ def apply():
     email_domain = (form_email.split("@", 1)[1] if "@" in form_email else "")
     revenue_raw = (data.get("revenue") or "").strip()
     business_name = (data.get("business_name") or "").strip()
-    has_privacy_consent = data.get("privacy_consent") == "on"
+    has_legal_consent = data.get("legal_consent") == "on" or data.get("privacy_consent") == "on"
 
     if not validate_csrf(data.get("csrf_token", "")):
         log_application_submission_rejected(
@@ -71,11 +71,11 @@ def apply():
         return redirect("/")
 
     if not is_valid_application_form(data):
-        rejection_reason = "missing_privacy_consent" if not has_privacy_consent else "invalid_form_fields"
+        rejection_reason = "missing_legal_consent" if not has_legal_consent else "invalid_form_fields"
         log_application_submission_rejected(
             "Public intake rejected: form validation failed",
             rejection_reason=rejection_reason,
-            privacy_consent=has_privacy_consent,
+            legal_consent=has_legal_consent,
             business_name=business_name[:80],
             product=form_product,
             email_domain=email_domain,
@@ -114,7 +114,7 @@ def apply():
                 (
                     data["business_name"].strip(),
                     data["owner_name"].strip(),
-                    data["email"].strip(),
+                    (data.get("email") or "").strip(),
                     form_phone_number,
                     data["revenue"],
                     data["product"].strip(),
@@ -148,4 +148,4 @@ def apply():
         # Avoid exposing details to end users; operator logs contain full context.
         return redirect("/")
 
-    return redirect("/")
+    return redirect("/?application_submitted=1")
