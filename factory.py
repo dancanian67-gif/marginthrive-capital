@@ -1,7 +1,11 @@
 import os
+from datetime import timedelta
 
 from dotenv import load_dotenv
 from flask import Flask
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_talisman import Talisman
 
 from config import configure_app
 from constants.operators import role_label
@@ -38,6 +42,30 @@ configure_ops_logging()
 def create_app() -> Flask:
     app = Flask(__name__)
     configure_app(app)
+
+    # Session security
+    app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=30)
+    app.config["SESSION_COOKIE_SECURE"] = True
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+    # Security headers
+    if is_production():
+        Talisman(
+            app,
+            force_https=False,
+            strict_transport_security=True,
+            content_security_policy=False,
+        )
+
+    # Rate limiting
+    Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=["200 per day", "50 per hour"],
+        storage_uri="memory://",
+    )
+
     register_error_handlers(app)
     register_template_globals(app)
     register_routes(app)
