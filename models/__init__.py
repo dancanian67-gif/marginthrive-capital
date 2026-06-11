@@ -3,6 +3,8 @@
 from models.application import Application
 from models.base import Base, NAMING_CONVENTION, metadata
 from models.officer import Officer
+from models.underwriting import UnderwritingDecision
+from models.workflow import WorkflowHistory
 from models.operator import Operator
 
 __all__ = [
@@ -11,5 +13,7 @@ __all__ = [
     "NAMING_CONVENTION",
     "metadata",
     "Officer",
+    "UnderwritingDecision",
+    "WorkflowHistory",
     "Operator",
 ]
