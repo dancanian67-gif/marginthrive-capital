@@ -7,6 +7,9 @@ from models.underwriting import UnderwritingDecision
 from models.operator import Operator
 from models.repayment import Repayment
 from models.loan_account_history import LoanAccountHistory
+from models.collections_history import CollectionsHistory
+from models.recovery_promise import RecoveryPromise
+from models.recovery_promise_history import RecoveryPromiseHistory
 
 __all__ = [
     "Application",
@@ -18,4 +21,7 @@ __all__ = [
     "Operator",
     "Repayment",
     "LoanAccountHistory"
+    "CollectionsHistory",
+    "RecoveryPromise",
+    "RecoveryPromiseHistory",
 ]
