@@ -4,8 +4,9 @@ from models.application import Application
 from models.base import Base, NAMING_CONVENTION, metadata
 from models.officer import Officer
 from models.underwriting import UnderwritingDecision
-from models.workflow import WorkflowHistory
 from models.operator import Operator
+from models.repayment import Repayment
+from models.loan_account_history import LoanAccountHistory
 
 __all__ = [
     "Application",
@@ -14,6 +15,7 @@ __all__ = [
     "metadata",
     "Officer",
     "UnderwritingDecision",
-    "WorkflowHistory",
     "Operator",
+    "Repayment",
+    "LoanAccountHistory"
 ]
