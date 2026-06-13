@@ -10,6 +10,10 @@ from models.loan_account_history import LoanAccountHistory
 from models.collections_history import CollectionsHistory
 from models.recovery_promise import RecoveryPromise
 from models.recovery_promise_history import RecoveryPromiseHistory
+from models.operational_event import OperationalEvent
+from models.operator_notification import OperatorNotification
+from models.application_document import ApplicationDocument
+from models.workflow import WorkflowHistory
 
 __all__ = [
     "Application",
@@ -24,4 +28,8 @@ __all__ = [
     "CollectionsHistory",
     "RecoveryPromise",
     "RecoveryPromiseHistory",
+    "OperationalEvent",
+    "OperatorNotification",
+    "ApplicationDocument",
+    "WorkflowHistory",
 ]
