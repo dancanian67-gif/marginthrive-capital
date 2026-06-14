@@ -24,7 +24,7 @@ __all__ = [
     "UnderwritingDecision",
     "Operator",
     "Repayment",
-    "LoanAccountHistory"
+    "LoanAccountHistory",
     "CollectionsHistory",
     "RecoveryPromise",
     "RecoveryPromiseHistory",
